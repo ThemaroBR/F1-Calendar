@@ -1,0 +1,12 @@
+[
+  {
+    "name": "Australian Grand Prix",
+    "track": "Albert Park",
+    "start": "2026-03-21T05:00:00Z",
+    "sessions": {
+      "FP1": "2026-03-19T02:00:00Z",
+      "Qualifying": "2026-03-20T02:00:00Z",
+      "Race": "2026-03-21T05:00:00Z"
+    }
+  }
+]
