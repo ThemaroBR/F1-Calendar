@@ -6,15 +6,22 @@ from fastapi.middleware.cors import CORSMiddleware
 from .models import Race
 from .services import is_valid_timezone, next_race, race_to_timezone
 from .storage import load_races
+from .settings import (
+    API_TITLE,
+    CORS_ALLOW_CREDENTIALS,
+    CORS_ALLOW_HEADERS,
+    CORS_ALLOW_METHODS,
+    CORS_ALLOW_ORIGINS,
+)
 
-app = FastAPI()
+app = FastAPI(title=API_TITLE)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=CORS_ALLOW_ORIGINS,
+    allow_credentials=CORS_ALLOW_CREDENTIALS,
+    allow_methods=CORS_ALLOW_METHODS,
+    allow_headers=CORS_ALLOW_HEADERS,
 )
 
 

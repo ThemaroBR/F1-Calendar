@@ -27,6 +27,8 @@ def race_to_timezone(race: Race, tzname: str) -> Race:
     return Race(
         name=race.name,
         track=race.track,
+        country_name=race.country_name,
+        country_code=race.country_code,
         start=to_local(race.start, tzname),
         sessions={key: to_local(value, tzname) for key, value in race.sessions.items()},
     )

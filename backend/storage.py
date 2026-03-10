@@ -1,4 +1,5 @@
 import json
+import logging
 import time
 from pathlib import Path
 from typing import TypedDict
@@ -7,12 +8,12 @@ from urllib.parse import urlencode
 from urllib.request import urlopen
 
 from .models import Race
+from .settings import CACHE_TTL_SECONDS, OPENF1_SESSIONS_URL, TARGET_YEAR
 
 
 DATA_FILE = Path(__file__).parent.parent / "data" / "races.json"
-OPENF1_SESSIONS_URL = "https://api.openf1.org/v1/sessions"
-TARGET_YEAR = 2026
-CACHE_TTL_SECONDS = 15 * 60
+
+logger = logging.getLogger(__name__)
 
 _cache: list[Race] | None = None
 _cache_until: float = 0.0
@@ -32,6 +33,8 @@ class OpenF1SessionRow(TypedDict, total=False):
 class MeetingAccumulator(TypedDict):
     name: str
     track: str
+    country_name: str | None
+    country_code: str | None
     sessions: dict[str, str]
 
 
@@ -62,6 +65,42 @@ def _fetch_openf1_sessions(year: int) -> list[OpenF1SessionRow]:
     return [row for row in data if isinstance(row, dict)]
 
 
+COUNTRY_CODE_MAP = {
+    "australia": "AU",
+    "bahrain": "BH",
+    "saudi arabia": "SA",
+    "china": "CN",
+    "japan": "JP",
+    "united states": "US",
+    "united states of america": "US",
+    "mexico": "MX",
+    "brazil": "BR",
+    "monaco": "MC",
+    "canada": "CA",
+    "united kingdom": "GB",
+    "great britain": "GB",
+    "england": "GB",
+    "spain": "ES",
+    "austria": "AT",
+    "hungary": "HU",
+    "belgium": "BE",
+    "netherlands": "NL",
+    "italy": "IT",
+    "azerbaijan": "AZ",
+    "singapore": "SG",
+    "qatar": "QA",
+    "united arab emirates": "AE",
+    "uae": "AE",
+    "france": "FR",
+}
+
+
+def _country_code_from_name(country_name: str | None) -> str | None:
+    if not country_name:
+        return None
+    return COUNTRY_CODE_MAP.get(country_name.strip().lower())
+
+
 def _build_races_from_sessions(rows: list[OpenF1SessionRow]) -> list[Race]:
     meetings: dict[int, MeetingAccumulator] = {}
 
@@ -77,6 +116,7 @@ def _build_races_from_sessions(rows: list[OpenF1SessionRow]) -> list[Race]:
             continue
 
         country_name = row.get("country_name")
+        country_code = _country_code_from_name(country_name)
         meeting_name = row.get("meeting_name")
         track = row.get("circuit_short_name") or row.get("location") or "Unknown Track"
         name = (country_name and f"{country_name} Grand Prix") or meeting_name or "Unknown Grand Prix"
@@ -86,9 +126,15 @@ def _build_races_from_sessions(rows: list[OpenF1SessionRow]) -> list[Race]:
             {
                 "name": name,
                 "track": track,
+                "country_name": country_name,
+                "country_code": country_code,
                 "sessions": {},
             },
         )
+        if meeting.get("country_name") is None and country_name:
+            meeting["country_name"] = country_name
+        if meeting.get("country_code") is None and country_code:
+            meeting["country_code"] = country_code
         meeting["sessions"][_normalize_session_name(session_name)] = date_start
 
     races: list[Race] = []
@@ -102,6 +148,8 @@ def _build_races_from_sessions(rows: list[OpenF1SessionRow]) -> list[Race]:
             Race(
                 name=meeting["name"],
                 track=meeting["track"],
+                country_name=meeting.get("country_name"),
+                country_code=meeting.get("country_code"),
                 start=race_start,
                 sessions=sessions,
             )
@@ -134,8 +182,7 @@ def load_races() -> list[Race]:
         races = _build_races_from_sessions(rows)
         if races:
             return _set_cache(races, now)
-    except (HTTPError, URLError, TimeoutError, json.JSONDecodeError, ValueError):
-        # Fall back to local static file if the upstream API is unavailable.
-        pass
+    except (HTTPError, URLError, TimeoutError, json.JSONDecodeError, ValueError) as exc:
+        logger.warning("OpenF1 fetch failed; falling back to local data", exc_info=exc)
 
     return _set_cache(_load_local_races(), now)

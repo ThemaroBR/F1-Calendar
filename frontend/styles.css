@@ -1,0 +1,296 @@
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@600;700;800&family=Rajdhani:wght@500;600;700&display=swap');
+
+:root {
+    --bg: #15151e;
+    --panel: #2f2f37;
+    --panel-2: #5a0f13;
+    --accent: #e10600;
+    --line: rgba(255, 255, 255, 0.12);
+    --text: #f4f4f8;
+    --muted: #c8c8d4;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    color: var(--text);
+    font-family: "Rajdhani", "Segoe UI", sans-serif;
+    background:
+        radial-gradient(circle at 18% -10%, rgba(225, 6, 0, 0.16), transparent 34%),
+        radial-gradient(circle at 82% 0%, rgba(90, 15, 19, 0.34), transparent 36%),
+        var(--bg);
+}
+
+.app {
+    max-width: 1080px;
+    margin: 0 auto;
+    padding: 14px 24px 56px;
+}
+
+.brand-row {
+    display: flex;
+    align-items: center;
+    margin-bottom: 20px;
+}
+
+.brand-block {
+    width: 100%;
+}
+
+.brand-title {
+    margin: 0;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    font: 800 54px/1 "Orbitron", sans-serif;
+    text-shadow: 0 0 18px rgba(225, 6, 0, 0.35);
+}
+
+.brand-subtitle {
+    margin: 10px 0 0;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--muted);
+    font: 700 20px/1.1 "Rajdhani", sans-serif;
+}
+
+.timezone-banner {
+    border-radius: 8px;
+    background: var(--panel-2);
+    min-height: 56px;
+    padding: 0 14px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 12px;
+    font: 600 17px/1 "Rajdhani", sans-serif;
+    border: 1px solid rgba(225, 6, 0, 0.35);
+}
+
+.timezone-banner a {
+    color: #fff;
+    font-weight: 700;
+    text-decoration: underline;
+}
+
+.gear-button {
+    width: 34px;
+    height: 34px;
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    border-radius: 7px;
+    background: var(--accent);
+    color: #fff;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.timezone-editor {
+    display: none;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 12px;
+    border-radius: 8px;
+    border: 1px solid var(--line);
+    background: var(--panel);
+    padding: 10px;
+}
+
+.timezone-editor.active {
+    display: flex;
+}
+
+.timezone-editor label {
+    font-size: 14px;
+    font-weight: 700;
+}
+
+.timezone-editor select {
+    flex: 1;
+    min-width: 200px;
+    height: 36px;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 7px;
+    padding: 0 10px;
+    color: var(--text);
+    background: var(--bg);
+    font: 600 16px/1 "Rajdhani", sans-serif;
+}
+
+.timezone-editor button {
+    height: 36px;
+    border: 0;
+    border-radius: 7px;
+    padding: 0 14px;
+    background: var(--accent);
+    color: #fff;
+    font: 700 15px/1 "Rajdhani", sans-serif;
+    cursor: pointer;
+}
+
+.status {
+    min-height: 24px;
+    color: #ffb8b8;
+    font: 600 16px/1 "Rajdhani", sans-serif;
+    margin-bottom: 8px;
+}
+
+.schedule-meta {
+    margin: 0 0 10px;
+    color: var(--muted);
+    font: 600 14px/1 "Rajdhani", sans-serif;
+}
+
+.schedule-list {
+    border: 1px solid var(--line);
+    background: linear-gradient(180deg, var(--panel), #26262f);
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.race-block + .race-block {
+    border-top: 1px solid var(--line);
+}
+
+.race-summary {
+    list-style: none;
+    min-height: 58px;
+    padding: 0 14px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+}
+
+.race-summary::-webkit-details-marker {
+    display: none;
+}
+
+.race-main {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+    flex: 1;
+}
+
+.caret {
+    width: 14px;
+    color: #d3daea;
+    font-size: 11px;
+    text-align: center;
+}
+
+.race-name {
+    color: #ffffff;
+    font: 700 28px/1 "Rajdhani", sans-serif;
+}
+
+.next-badge {
+    margin-left: 8px;
+    border-radius: 4px;
+    background: var(--accent);
+    color: #fff;
+    padding: 2px 8px;
+    font: 700 12px/1 "Rajdhani", sans-serif;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.race-meta {
+    color: var(--muted);
+    font: 600 14px/1 "Rajdhani", sans-serif;
+    text-align: right;
+    white-space: nowrap;
+    padding-left: 8px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.track-group {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+}
+
+.track-flag {
+    width: 20px;
+    height: 14px;
+    object-fit: cover;
+    border-radius: 2px;
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.2);
+}
+
+.track-sep {
+    color: rgba(255, 255, 255, 0.3);
+}
+
+.session-row {
+    display: grid;
+    grid-template-columns: 1fr 112px 90px;
+    min-height: 52px;
+    align-items: center;
+    padding: 0 14px 0 40px;
+    border-top: 1px solid var(--line);
+    font: 600 15px/1 "Rajdhani", sans-serif;
+}
+
+.session-name {
+    color: var(--text);
+}
+
+.session-date,
+.session-time {
+    color: var(--muted);
+}
+
+.empty-state {
+    padding: 18px 14px;
+    color: var(--muted);
+    font: 600 15px/1.3 "Rajdhani", sans-serif;
+}
+
+@media (max-width: 900px) {
+    .app {
+        padding: 14px 12px 90px;
+    }
+
+    .brand-row {
+        margin-bottom: 14px;
+    }
+
+    .brand-title {
+        font-size: 38px;
+    }
+
+    .timezone-banner {
+        font-size: 15px;
+    }
+
+    .race-summary {
+        flex-wrap: wrap;
+        align-items: center;
+        padding: 10px 14px;
+    }
+
+    .race-main {
+        width: 100%;
+    }
+
+    .race-meta {
+        width: 100%;
+        text-align: left;
+        padding-left: 24px;
+    }
+
+    .session-row {
+        grid-template-columns: 1fr;
+        gap: 4px;
+        padding: 8px 14px 8px 40px;
+    }
+}
