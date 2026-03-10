@@ -1,3 +1,4 @@
+import logging
 from typing import Annotated
 
 from fastapi import FastAPI, HTTPException, Query
@@ -12,6 +13,12 @@ from .settings import (
     CORS_ALLOW_HEADERS,
     CORS_ALLOW_METHODS,
     CORS_ALLOW_ORIGINS,
+    LOG_LEVEL,
+)
+
+logging.basicConfig(
+    level=LOG_LEVEL,
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
 )
 
 app = FastAPI(title=API_TITLE)

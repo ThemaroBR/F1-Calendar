@@ -1,4 +1,5 @@
 API_TITLE = "F1 calendar API"
+LOG_LEVEL = "INFO"
 
 OPENF1_SESSIONS_URL = "https://api.openf1.org/v1/sessions"
 TARGET_YEAR = 2026
