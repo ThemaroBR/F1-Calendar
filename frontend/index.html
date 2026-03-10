@@ -7,46 +7,70 @@
     <link rel="stylesheet" href="./styles.css">
 </head>
 <body>
-    <div class="app">
-        <section class="brand-row">
-            <div class="brand-block">
-                <div>
-                    <h1 class="brand-title">F1 Calendar 2026</h1>
-                    <p class="brand-subtitle">Races, Qualifying & Practice Sessions</p>
-                </div>
-            </div>
-        </section>
+    <header>
+        <div class="logo">
+            <span class="logo-f1">F1</span>
+            <span class="logo-sep">/</span>
+            <span class="logo-cal">Season Calendar</span>
+        </div>
+        <nav>
+            <a href="#" class="active">Races</a>
+            <a href="#">Standings</a>
+            <a href="#">Teams</a>
+            <a href="#">Results</a>
+        </nav>
+        <div class="tz-pill" id="tz-pill">
+            <span class="tz-dot"></span>
+            <span id="tz-label">Local timezone</span>
+            <span>&#x25BE;</span>
+        </div>
+    </header>
 
-        <section class="timezone-banner">
-            <span>Showing times for: <a id="timezone-label" href="#" aria-label="Timezone label">Local timezone</a>.</span>
-            <button class="gear-button" id="toggle-timezone" type="button" aria-label="Timezone settings">Edit</button>
-        </section>
-
-        <form class="timezone-editor" id="timezone-editor">
-            <label for="tz">Timezone</label>
-            <select id="tz">
-                <option value="">Browser local timezone</option>
-                <option value="America/Sao_Paulo">America/Sao_Paulo</option>
-                <option value="America/New_York">America/New_York</option>
-                <option value="America/Los_Angeles">America/Los_Angeles</option>
-                <option value="Europe/London">Europe/London</option>
-                <option value="Europe/Paris">Europe/Paris</option>
-                <option value="Europe/Berlin">Europe/Berlin</option>
-                <option value="Europe/Rome">Europe/Rome</option>
-                <option value="Europe/Madrid">Europe/Madrid</option>
-                <option value="Asia/Tokyo">Asia/Tokyo</option>
-                <option value="Asia/Singapore">Asia/Singapore</option>
-                <option value="Asia/Dubai">Asia/Dubai</option>
-                <option value="Australia/Melbourne">Australia/Melbourne</option>
-                <option value="UTC">UTC</option>
-            </select>
-            <button id="refresh" type="submit">Apply</button>
-        </form>
-
-        <div class="status" id="status"></div>
-        <p class="schedule-meta" id="schedule-meta"></p>
-        <section class="schedule-list" id="races"></section>
+    <div class="tz-panel" id="tz-panel">
+        <label for="tz">Timezone</label>
+        <select id="tz">
+            <option value="">Browser local timezone</option>
+            <option value="America/Sao_Paulo">America/Sao_Paulo</option>
+            <option value="America/New_York">America/New_York</option>
+            <option value="America/Los_Angeles">America/Los_Angeles</option>
+            <option value="Europe/London">Europe/London</option>
+            <option value="Europe/Paris">Europe/Paris</option>
+            <option value="Europe/Berlin">Europe/Berlin</option>
+            <option value="Europe/Rome">Europe/Rome</option>
+            <option value="Europe/Madrid">Europe/Madrid</option>
+            <option value="Asia/Tokyo">Asia/Tokyo</option>
+            <option value="Asia/Singapore">Asia/Singapore</option>
+            <option value="Asia/Dubai">Asia/Dubai</option>
+            <option value="Australia/Melbourne">Australia/Melbourne</option>
+            <option value="UTC">UTC</option>
+        </select>
+        <button id="tz-apply" type="button">Apply</button>
     </div>
+
+    <section class="hero">
+        <div class="hero-label">Formula 1 World Championship</div>
+        <h1>Season<br><em>Calendar</em></h1>
+        <div class="hero-meta">
+            <span><strong id="total-weekends">0</strong> Race Weekends</span>
+            <span><strong id="total-sprints">0</strong> Sprint Events</span>
+            <span id="season-range"></span>
+        </div>
+    </section>
+
+    <div class="accent-bar"></div>
+
+    <p class="status" id="status"></p>
+
+    <section class="race-list">
+        <div class="list-header">
+            <span>#</span>
+            <span>Grand Prix</span>
+            <span>Date</span>
+            <span>Circuit</span>
+            <span></span>
+        </div>
+        <div id="race-list"></div>
+    </section>
 
     <script src="./app.js"></script>
 </body>

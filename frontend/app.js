@@ -18,15 +18,29 @@ const SESSION_PRIORITY = {
     Race: 7
 };
 
-const timezoneLabel = document.getElementById('timezone-label');
-const timezoneEditor = document.getElementById('timezone-editor');
-const timezoneSelect = document.getElementById('tz');
+const tzPill = document.getElementById('tz-pill');
+const tzLabel = document.getElementById('tz-label');
+const tzPanel = document.getElementById('tz-panel');
+const tzSelect = document.getElementById('tz');
+const tzApply = document.getElementById('tz-apply');
 const statusEl = document.getElementById('status');
-const scheduleMeta = document.getElementById('schedule-meta');
-const racesEl = document.getElementById('races');
+const totalWeekendsEl = document.getElementById('total-weekends');
+const totalSprintsEl = document.getElementById('total-sprints');
+const seasonRangeEl = document.getElementById('season-range');
+const raceListEl = document.getElementById('race-list');
+
 const weekendFormatter = new Intl.DateTimeFormat([], { month: 'short', day: '2-digit' });
 const sessionDayFormatter = new Intl.DateTimeFormat([], { month: 'short', day: '2-digit' });
 const sessionTimeFormatter = new Intl.DateTimeFormat([], { hour: '2-digit', minute: '2-digit', hour12: false });
+const monthFormatter = new Intl.DateTimeFormat([], { month: 'short' });
+
+function normalizeSessionLabel(label) {
+    return SESSION_LABELS[label] || label;
+}
+
+function sessionOrder(name) {
+    return SESSION_PRIORITY[name] || 99;
+}
 
 function formatDateParts(value) {
     const date = new Date(value);
@@ -36,8 +50,12 @@ function formatDateParts(value) {
     };
 }
 
+function formatWeekendDate(value) {
+    return weekendFormatter.format(new Date(value));
+}
+
 function getTimezoneValue() {
-    return timezoneSelect.value.trim();
+    return tzSelect.value.trim();
 }
 
 function getDisplayTimezone() {
@@ -49,7 +67,7 @@ function getDisplayTimezone() {
 }
 
 function updateTimezoneLabel() {
-    timezoneLabel.textContent = getDisplayTimezone();
+    tzLabel.textContent = getDisplayTimezone();
 }
 
 function apiUrl(path) {
@@ -61,24 +79,8 @@ function apiUrl(path) {
     return url;
 }
 
-function normalizeSessionLabel(label) {
-    return SESSION_LABELS[label] || label;
-}
-
-function sessionOrder(name) {
-    return SESSION_PRIORITY[name] || 99;
-}
-
 function setStatus(message) {
     statusEl.textContent = message;
-}
-
-function formatWeekendDate(value) {
-    return weekendFormatter.format(new Date(value));
-}
-
-function updateScheduleMeta(count) {
-    scheduleMeta.textContent = `Showing ${count} race weekends for 2026`;
 }
 
 function flagUrlForRace(race) {
@@ -88,71 +90,111 @@ function flagUrlForRace(race) {
     return `https://flagcdn.com/w20/${race.country_code.toLowerCase()}.png`;
 }
 
-function renderRaces(races, nextRaceName) {
-    racesEl.innerHTML = '';
-
+function formatSeasonRange(races) {
     if (!races.length) {
-        racesEl.innerHTML = '<div class="empty-state">No race weekends available right now.</div>';
+        seasonRangeEl.textContent = '';
         return;
     }
+    const sorted = [...races].sort((a, b) => new Date(a.start) - new Date(b.start));
+    const start = new Date(sorted[0].start);
+    const end = new Date(sorted[sorted.length - 1].start);
+    const startLabel = monthFormatter.format(start).toUpperCase();
+    const endLabel = monthFormatter.format(end).toUpperCase();
+    seasonRangeEl.textContent = `${startLabel} - ${endLabel} 2026`;
+}
 
-    races.forEach((race, index) => {
-        const block = document.createElement('details');
-        block.className = 'race-block';
-        block.open = nextRaceName ? race.name === nextRaceName : index === 0;
+function getSprintCount(races) {
+    return races.reduce((count, race) => {
+        const hasSprint = Object.keys(race.sessions).some((name) => normalizeSessionLabel(name).includes('Sprint'));
+        return hasSprint ? count + 1 : count;
+    }, 0);
+}
 
-        const summary = document.createElement('summary');
-        summary.className = 'race-summary';
-        const weekendDate = formatWeekendDate(race.start);
-        const flagUrl = flagUrlForRace(race);
-        const flagLabel = race.country_name ? `${race.country_name} flag` : 'Country flag';
-        summary.innerHTML = `
-            <div class="race-main">
-                <span class="caret">${block.open ? 'v' : '>'}</span>
-                <span class="race-name">${race.name}</span>
-                ${nextRaceName === race.name ? '<span class="next-badge">Next</span>' : ''}
-            </div>
-            <span class="race-meta">
-                <span class="track-group">
-                    ${flagUrl ? `<img class="track-flag" src="${flagUrl}" alt="${flagLabel}" loading="lazy">` : ''}
-                    <span class="track-name">${race.track}</span>
-                </span>
-                <span class="track-sep">|</span>
-                <span class="track-date">${weekendDate}</span>
-            </span>
-        `;
-        block.appendChild(summary);
+function isPastRace(race, now) {
+    return new Date(race.start) < now;
+}
 
-        const rows = Object.entries(race.sessions)
-            .map(([name, when]) => ({ name: normalizeSessionLabel(name), when }))
-            .sort((a, b) => {
-                const byOrder = sessionOrder(a.name) - sessionOrder(b.name);
-                if (byOrder !== 0) {
-                    return byOrder;
-                }
-                return new Date(a.when) - new Date(b.when);
-            });
+function renderSessions(race) {
+    const rows = Object.entries(race.sessions)
+        .map(([name, when]) => ({ name: normalizeSessionLabel(name), when }))
+        .sort((a, b) => {
+            const byOrder = sessionOrder(a.name) - sessionOrder(b.name);
+            if (byOrder !== 0) {
+                return byOrder;
+            }
+            return new Date(a.when) - new Date(b.when);
+        });
 
-        rows.forEach((session) => {
-            const parts = formatDateParts(session.when);
-            const row = document.createElement('div');
-            row.className = 'session-row';
-            row.innerHTML = `
+    return rows.map((session) => {
+        const parts = formatDateParts(session.when);
+        return `
+            <div class="session-row">
+                <span></span>
                 <span class="session-name">${session.name}</span>
                 <span class="session-date">${parts.day}</span>
                 <span class="session-time">${parts.time}</span>
-            `;
-            block.appendChild(row);
-        });
+                <span></span>
+            </div>
+        `;
+    }).join('');
+}
 
-        block.addEventListener('toggle', () => {
-            const caret = block.querySelector('.caret');
-            if (caret) {
-                caret.textContent = block.open ? 'v' : '>';
+function renderRaceItem(race, index, nextRaceName, now) {
+    const weekendDate = formatWeekendDate(race.start);
+    const flagUrl = flagUrlForRace(race);
+    const flagLabel = race.country_name ? `${race.country_name} flag` : 'Country flag';
+    const sprintBadge = Object.keys(race.sessions).some((name) => normalizeSessionLabel(name).includes('Sprint'));
+    const isNext = nextRaceName && race.name === nextRaceName;
+    const past = isPastRace(race, now);
+    const badge = isNext ? '<span class="badge badge-next">Next</span>' : '';
+    const sprint = sprintBadge ? '<span class="badge badge-sprint">Sprint</span>' : '';
+    const done = past ? '<span class="badge badge-done">Finished</span>' : '';
+    const badges = `<div class="race-badge">${sprint}${badge}${done}</div>`;
+    const locationLabel = race.country_name || race.track;
+    const rowNumber = String(index + 1).padStart(2, '0');
+
+    return `
+        <div class="race-item ${isNext ? 'is-next' : ''} ${past ? 'is-past' : ''}" data-race="${race.name}">
+            <div class="race-row">
+                <span class="race-num">${rowNumber}</span>
+                <div class="race-info">
+                    <span class="race-name">${race.name} <span class="chevron">></span></span>
+                    <span class="race-circuit">
+                        ${flagUrl ? `<img class="track-flag" src="${flagUrl}" alt="${flagLabel}" loading="lazy">` : ''}
+                        <span>${race.track}</span>
+                    </span>
+                </div>
+                <span class="race-date">${weekendDate}</span>
+                <span class="race-location">${locationLabel}</span>
+                ${badges}
+            </div>
+            <div class="sessions ${isNext ? 'open' : ''}">
+                ${renderSessions(race)}
+            </div>
+        </div>
+    `;
+}
+
+function renderRaces(races, nextRaceName) {
+    if (!races.length) {
+        raceListEl.innerHTML = '<div class="empty-state">No race weekends available right now.</div>';
+        return;
+    }
+
+    const now = new Date();
+    raceListEl.innerHTML = races
+        .map((race, index) => renderRaceItem(race, index, nextRaceName, now))
+        .join('');
+
+    raceListEl.querySelectorAll('.race-item').forEach((item) => {
+        item.addEventListener('click', () => {
+            const sessions = item.querySelector('.sessions');
+            if (!sessions) {
+                return;
             }
+            sessions.classList.toggle('open');
+            item.classList.toggle('open');
         });
-
-        racesEl.appendChild(block);
     });
 }
 
@@ -180,27 +222,28 @@ async function fetchAndRender() {
             fetchJSON(apiUrl('/races/next')).catch(() => null)
         ]);
         const sortedRaces = [...races].sort((a, b) => new Date(a.start) - new Date(b.start));
-        updateScheduleMeta(sortedRaces.length);
+        totalWeekendsEl.textContent = String(sortedRaces.length);
+        totalSprintsEl.textContent = String(getSprintCount(sortedRaces));
+        formatSeasonRange(sortedRaces);
         renderRaces(sortedRaces, nextRace ? nextRace.name : null);
     } catch (error) {
         setStatus(`Could not load schedule: ${error.message}`);
-        racesEl.innerHTML = '';
-        updateScheduleMeta(0);
+        raceListEl.innerHTML = '<div class="empty-state">No race weekends available right now.</div>';
+        totalWeekendsEl.textContent = '0';
+        totalSprintsEl.textContent = '0';
+        seasonRangeEl.textContent = '';
     }
 }
 
-document.getElementById('toggle-timezone').addEventListener('click', () => {
-    timezoneEditor.classList.toggle('active');
-});
+function toggleTimezonePanel() {
+    tzPanel.classList.toggle('active');
+}
 
-timezoneEditor.addEventListener('submit', (event) => {
+tzPill.addEventListener('click', toggleTimezonePanel);
+tzApply.addEventListener('click', (event) => {
     event.preventDefault();
+    toggleTimezonePanel();
     fetchAndRender();
-});
-
-timezoneLabel.addEventListener('click', (event) => {
-    event.preventDefault();
-    timezoneEditor.classList.toggle('active');
 });
 
 fetchAndRender();
