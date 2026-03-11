@@ -2,7 +2,11 @@ const apiBase = window.API_BASE || 'http://127.0.0.1:8000';
 const SESSION_LABELS = {
     FP1: 'Free Practice 1',
     FP2: 'Free Practice 2',
-    FP3: 'Free Practice 3'
+    FP3: 'Free Practice 3',
+    Qualifying: 'Qualifying',
+    Race: 'Race',
+    Sprint: 'Sprint',
+    'Sprint Qualifying': 'Sprint Qualifying'
 };
 const SESSION_PRIORITY = {
     'Free Practice 1': 1,
@@ -129,7 +133,7 @@ function isPastRace(race, now) {
     return lastSession < now;
 }
 
-function renderSessions(race) {
+function renderSessions(race, driversBySession) {
     const rows = Object.entries(race.sessions)
         .map(([name, when]) => ({ name: normalizeSessionLabel(name), when }))
         .sort((a, b) => {
@@ -142,19 +146,23 @@ function renderSessions(race) {
 
     return rows.map((session) => {
         const parts = formatDateParts(session.when);
+        const driver = driversBySession ? driversBySession[session.name] : null;
+        const chipHtml = driver ? renderDriverChip(driver) : '';
         return `
             <div class="session-row">
                 <span></span>
-                <span class="session-name">${session.name}</span>
+                <span class="session-name">
+                    <span>${session.name}</span>
+                    <span class="session-driver">${chipHtml}</span>
+                </span>
                 <span class="session-date">${parts.day}</span>
                 <span class="session-time">${parts.time}</span>
-                <span></span>
             </div>
         `;
     }).join('');
 }
 
-function renderRaceItem(race, index, nextRaceName, now) {
+function renderRaceItem(race, index, nextRaceName, now, winnerDriver, driversBySession) {
     const weekendDate = formatWeekendDate(race.start);
     const flagUrl = flagUrlForRace(race);
     const flagLabel = race.country_name ? `${race.country_name} flag` : 'Country flag';
@@ -163,10 +171,11 @@ function renderRaceItem(race, index, nextRaceName, now) {
     const past = isPastRace(race, now);
     const badge = isNext ? '<span class="badge badge-next">Next</span>' : '';
     const sprint = sprintBadge ? '<span class="badge badge-sprint">Sprint</span>' : '';
-    const done = past ? '<span class="badge badge-done">Finished</span>' : '';
+    const done = past && !winnerDriver ? '<span class="badge badge-done">Finished</span>' : '';
     const badges = `<div class="race-badge">${sprint}${badge}${done}</div>`;
     const locationLabel = race.country_name || race.track;
     const rowNumber = String(index + 1).padStart(2, '0');
+    const winnerCardHtml = past && winnerDriver ? renderWinnerCard(winnerDriver) : '';
 
     return `
         <div class="race-item ${isNext ? 'is-next' : ''} ${past ? 'is-past' : ''}" data-race="${race.name}">
@@ -178,19 +187,26 @@ function renderRaceItem(race, index, nextRaceName, now) {
                         ${flagUrl ? `<img class="track-flag" src="${flagUrl}" alt="${flagLabel}" loading="lazy">` : ''}
                         <span>${race.track}</span>
                     </span>
+                    ${winnerCardHtml ? `<div class="race-winner">${winnerCardHtml}</div>` : ''}
                 </div>
                 <span class="race-date">${weekendDate}</span>
                 <span class="race-location">${locationLabel}</span>
-                ${badges}
+                <div class="race-right">
+                    ${badges}
+                </div>
             </div>
             <div class="sessions ${isNext ? 'open' : ''}">
-                ${renderSessions(race)}
+                ${renderSessions(race, driversBySession)}
             </div>
         </div>
     `;
 }
 
-function renderRaces(races, nextRaceName) {
+// Tracks which race names have already had their results fetched,
+// so expanding the same row twice never triggers a second API call.
+const _fetchedRaces = new Set();
+
+function renderRaces(races, nextRaceName, raceResults) {
     if (!races.length) {
         raceListEl.innerHTML = '<div class="empty-state">No race weekends available right now.</div>';
         return;
@@ -198,7 +214,12 @@ function renderRaces(races, nextRaceName) {
 
     const now = new Date();
     raceListEl.innerHTML = races
-        .map((race, index) => renderRaceItem(race, index, nextRaceName, now))
+        .map((race, index) => {
+            const result = raceResults ? raceResults[race.name] : null;
+            const winnerDriver = result ? result.winner : null;
+            const driversBySession = result ? result.sessions : null;
+            return renderRaceItem(race, index, nextRaceName, now, winnerDriver, driversBySession);
+        })
         .join('');
 
     raceListEl.querySelectorAll('.race-item').forEach((item) => {
@@ -207,10 +228,51 @@ function renderRaces(races, nextRaceName) {
             item.classList.add('open');
         }
 
-        item.addEventListener('click', () => {
+        item.addEventListener('click', async () => {
             if (!sessions) return;
+
+            const isOpening = !sessions.classList.contains('open');
             sessions.classList.toggle('open');
             item.classList.toggle('open');
+
+            if (!isOpening) return;
+            const raceName = item.dataset.race;
+            if (!raceName || _fetchedRaces.has(raceName)) return;
+            const race = races.find((r) => r.name === raceName);
+            if (!race || !isPastRace(race, now)) return;
+
+            _fetchedRaces.add(raceName);
+
+            const loadingRow = document.createElement('div');
+            loadingRow.className = 'session-row session-loading';
+            loadingRow.innerHTML = '<span></span><span class="session-name" style="color:var(--muted)">Loading results...</span>';
+            sessions.prepend(loadingRow);
+
+            try {
+                const meetingKey = await fetchMeetingKey(race);
+                if (!meetingKey) return;
+                const result = await fetchRaceResults(race, meetingKey);
+
+                const winnerSlot = item.querySelector('.race-winner');
+                const winnerHtml = result.winner ? renderWinnerCard(result.winner) : '';
+                if (winnerSlot) {
+                    winnerSlot.innerHTML = winnerHtml;
+                } else if (winnerHtml) {
+                    const raceInfo = item.querySelector('.race-info');
+                    if (raceInfo) {
+                        const div = document.createElement('div');
+                        div.className = 'race-winner';
+                        div.innerHTML = winnerHtml;
+                        raceInfo.appendChild(div);
+                    }
+                }
+
+                sessions.innerHTML = renderSessions(race, result.sessions);
+            } catch (e) {
+                console.warn('Could not load race results for', raceName, e);
+            } finally {
+                loadingRow.remove();
+            }
         });
     });
 }
@@ -232,6 +294,153 @@ async function fetchJSON(url) {
     return response.json();
 }
 
+const openF1Base = `${apiBase}/openf1`;
+
+async function fetchOpenF1(path) {
+    try {
+        const res = await fetch(openF1Base + path);
+        if (!res.ok) return null;
+        return res.json();
+    } catch (e) {
+        console.warn('OpenF1 fetch failed:', path, e);
+        return null;
+    }
+}
+
+async function fetchDriverMap(sessionKey) {
+    const data = await fetchOpenF1(`/drivers?session_key=${sessionKey}`);
+    if (!data) return {};
+    return Object.fromEntries(data.map((driver) => [driver.driver_number, driver]));
+}
+
+async function fetchRaceWinner(raceSessionKey) {
+    const results = await fetchOpenF1(`/session_result?session_key=${raceSessionKey}&position=1`);
+    if (!results || !results.length) return null;
+    const driverMap = await fetchDriverMap(raceSessionKey);
+    return driverMap[results[0].driver_number] || null;
+}
+
+async function fetchFastestDriver(sessionKey, sessionName) {
+    const isQual = sessionName === 'Qualifying' || sessionName === 'Sprint Qualifying';
+    if (isQual) {
+        const results = await fetchOpenF1(`/session_result?session_key=${sessionKey}&position=1`);
+        if (!results || !results.length) return null;
+        const driverMap = await fetchDriverMap(sessionKey);
+        return driverMap[results[0].driver_number] || null;
+    }
+    const laps = await fetchOpenF1(`/laps?session_key=${sessionKey}`);
+    if (!laps || !laps.length) return null;
+    const validLaps = laps.filter((lap) => lap.lap_duration != null && lap.lap_duration > 0);
+    if (!validLaps.length) return null;
+    validLaps.sort((a, b) => a.lap_duration - b.lap_duration);
+    const fastest = validLaps[0];
+    const driverMap = await fetchDriverMap(sessionKey);
+    return driverMap[fastest.driver_number] || null;
+}
+
+const DRIVER_STAT_SESSIONS = new Set([
+    'Free Practice 1', 'Free Practice 2', 'Free Practice 3',
+    'Sprint Qualifying', 'Qualifying', 'Race'
+]);
+
+const SESSION_NAME_TO_OPENF1 = {
+    'Free Practice 1': 'Practice 1',
+    'Free Practice 2': 'Practice 2',
+    'Free Practice 3': 'Practice 3',
+    'Sprint Qualifying': 'Sprint Qualifying',
+    Qualifying: 'Qualifying',
+    Race: 'Race'
+};
+
+async function fetchRaceResults(race, meetingKey) {
+    const sessionResults = {};
+    const sessionEntries = Object.entries(race.sessions)
+        .map(([raw]) => normalizeSessionLabel(raw))
+        .filter((name) => DRIVER_STAT_SESSIONS.has(name));
+    const uniqueSessionNames = [...new Set(sessionEntries)];
+
+    const openF1SessionFetches = uniqueSessionNames.map(async (sessionName) => {
+        const openF1Name = SESSION_NAME_TO_OPENF1[sessionName];
+        if (!openF1Name) return null;
+        const session = await fetchOpenF1(
+            `/sessions?meeting_key=${meetingKey}&session_name=${encodeURIComponent(openF1Name)}`
+        );
+        if (!session || !session.length) return null;
+        return { sessionName, sessionKey: session[0].session_key };
+    });
+
+    const sessionMetas = (await Promise.all(openF1SessionFetches)).filter(Boolean);
+    await Promise.all(sessionMetas.map(async ({ sessionName, sessionKey }) => {
+        const driver = sessionName === 'Race'
+            ? await fetchRaceWinner(sessionKey)
+            : await fetchFastestDriver(sessionKey, sessionName);
+        if (driver) sessionResults[sessionName] = driver;
+    }));
+
+    return {
+        winner: sessionResults.Race || null,
+        sessions: sessionResults
+    };
+}
+
+async function fetchMeetingKey(race) {
+    if (race.meeting_key) {
+        return race.meeting_key;
+    }
+    const data = await fetchOpenF1('/meetings?year=2026');
+    if (!data) return null;
+    const normalized = race.name.toLowerCase().replace(/\s+grand\s+prix/i, '').trim();
+    const match = data.find((meeting) => {
+        const meetingName = (meeting.meeting_name || meeting.circuit_short_name || '').toLowerCase();
+        return meetingName.includes(normalized) || normalized.includes(meetingName);
+    });
+    return match ? match.meeting_key : null;
+}
+
+async function fetchAllRaceResults(pastRaces) {
+    const results = {};
+    const CHUNK = 3;
+    for (let i = 0; i < pastRaces.length; i += CHUNK) {
+        const chunk = pastRaces.slice(i, i + CHUNK);
+        await Promise.all(chunk.map(async (race) => {
+            const meetingKey = await fetchMeetingKey(race);
+            if (!meetingKey) return;
+            results[race.name] = await fetchRaceResults(race, meetingKey);
+        }));
+    }
+    return results;
+}
+
+function renderDriverChip(driver) {
+    if (!driver) return '';
+    const color = driver.team_colour ? `#${driver.team_colour}` : 'var(--muted)';
+    return `
+        <span class="driver-chip">
+            <span class="driver-chip-bar" style="background:${color}"></span>
+            <span class="driver-chip-acronym" style="color:${color}">${driver.name_acronym}</span>
+        </span>
+    `;
+}
+
+function renderWinnerCard(driver) {
+    if (!driver) return '';
+    const color = driver.team_colour ? `#${driver.team_colour}` : 'var(--muted)';
+    const headshotHtml = driver.headshot_url
+        ? `<img class="winner-headshot" src="${driver.headshot_url}" alt="${driver.full_name}" loading="lazy">`
+        : `<span class="winner-headshot winner-headshot-placeholder"></span>`;
+    return `
+        <div class="winner-card">
+            <span class="winner-label">Winner</span>
+            ${headshotHtml}
+            <span class="winner-bar" style="background:${color}"></span>
+            <div class="winner-info">
+                <span class="winner-name">${driver.full_name}</span>
+                <span class="winner-team" style="color:${color}">${driver.team_name}</span>
+            </div>
+        </div>
+    `;
+}
+
 async function fetchAndRender() {
     setStatus('');
     updateTimezoneLabel();
@@ -245,7 +454,7 @@ async function fetchAndRender() {
         totalWeekendsEl.textContent = String(filteredRaces.length);
         totalSprintsEl.textContent = String(getSprintCount(filteredRaces));
         formatSeasonRange(filteredRaces);
-        renderRaces(filteredRaces, nextRace ? nextRace.name : null);
+        renderRaces(filteredRaces, nextRace ? nextRace.name : null, null);
     } catch (error) {
         setStatus(`Could not load schedule: ${error.message}`);
         raceListEl.innerHTML = '<div class="empty-state">No race weekends available right now.</div>';

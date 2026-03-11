@@ -273,7 +273,7 @@ h1 em {
 
 .list-header {
     display: grid;
-    grid-template-columns: 48px 1fr 160px 120px 100px;
+    grid-template-columns: 40px 1fr 160px 120px 100px;
     padding: 20px 0 12px;
     border-bottom: 1px solid var(--border);
     font-family: "Barlow Condensed", sans-serif;
@@ -300,7 +300,7 @@ h1 em {
 
 .race-row {
     display: grid;
-    grid-template-columns: 48px 1fr 160px 120px 100px;
+    grid-template-columns: 40px 1fr 160px 120px 100px;
     align-items: center;
     padding: 20px 0;
 }
@@ -315,6 +315,7 @@ h1 em {
     display: flex;
     flex-direction: column;
     gap: 4px;
+    padding-left: 2px;
 }
 
 .race-name {
@@ -398,7 +399,7 @@ h1 em {
 
 .session-row {
     display: grid;
-    grid-template-columns: 48px 1fr 160px 120px 100px;
+    grid-template-columns: 40px 1fr 160px 120px;
     align-items: center;
     padding: 12px 0;
     border-top: 1px solid var(--border);
@@ -411,6 +412,15 @@ h1 em {
     font-weight: 400;
     padding-left: 2px;
     grid-column: 2;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.session-driver {
+    margin-left: auto;
+    display: inline-flex;
+    align-items: center;
 }
 
 .session-date {
@@ -503,7 +513,7 @@ h1 em {
     .list-header,
     .race-row,
     .session-row {
-        grid-template-columns: 32px 1fr 120px;
+        grid-template-columns: 28px 1fr 120px;
     }
 
     .race-location,

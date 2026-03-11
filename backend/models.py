@@ -8,5 +8,6 @@ class Race(BaseModel):
     track: str
     country_name: str | None = None
     country_code: str | None = None
+    meeting_key: int | None = None
     start: datetime
     sessions: dict[str, datetime]  # e.g. {'FP1': datetime, 'Qualifying': datetime, 'Race': datetime}

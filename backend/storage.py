@@ -138,7 +138,7 @@ def _build_races_from_sessions(rows: list[OpenF1SessionRow]) -> list[Race]:
         meeting["sessions"][_normalize_session_name(session_name)] = date_start
 
     races: list[Race] = []
-    for meeting in meetings.values():
+    for meeting_key, meeting in meetings.items():
         sessions = meeting["sessions"]
         if not sessions:
             continue
@@ -150,6 +150,7 @@ def _build_races_from_sessions(rows: list[OpenF1SessionRow]) -> list[Race]:
                 track=meeting["track"],
                 country_name=meeting.get("country_name"),
                 country_code=meeting.get("country_code"),
+                meeting_key=meeting_key,
                 start=race_start,
                 sessions=sessions,
             )
