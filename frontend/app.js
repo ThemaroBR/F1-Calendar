@@ -1,12 +1,8 @@
-const apiBase = 'http://127.0.0.1:8000';
+const apiBase = window.API_BASE || 'http://127.0.0.1:8000';
 const SESSION_LABELS = {
     FP1: 'Free Practice 1',
     FP2: 'Free Practice 2',
-    FP3: 'Free Practice 3',
-    Race: 'Race',
-    Qualifying: 'Qualifying',
-    Sprint: 'Sprint',
-    'Sprint Qualifying': 'Sprint Qualifying'
+    FP3: 'Free Practice 3'
 };
 const SESSION_PRIORITY = {
     'Free Practice 1': 1,
@@ -29,10 +25,9 @@ const totalSprintsEl = document.getElementById('total-sprints');
 const seasonRangeEl = document.getElementById('season-range');
 const raceListEl = document.getElementById('race-list');
 
-const weekendFormatter = new Intl.DateTimeFormat([], { month: 'short', day: '2-digit' });
-const sessionDayFormatter = new Intl.DateTimeFormat([], { month: 'short', day: '2-digit' });
-const sessionTimeFormatter = new Intl.DateTimeFormat([], { hour: '2-digit', minute: '2-digit', hour12: false });
-const monthFormatter = new Intl.DateTimeFormat([], { month: 'short' });
+function getFormatter(options) {
+    return new Intl.DateTimeFormat([], { timeZone: getDisplayTimezone(), ...options });
+}
 
 function normalizeSessionLabel(label) {
     return SESSION_LABELS[label] || label;
@@ -45,13 +40,13 @@ function sessionOrder(name) {
 function formatDateParts(value) {
     const date = new Date(value);
     return {
-        day: sessionDayFormatter.format(date),
-        time: sessionTimeFormatter.format(date)
+        day: getFormatter({ month: 'short', day: '2-digit' }).format(date),
+        time: getFormatter({ hour: '2-digit', minute: '2-digit', hour12: false }).format(date)
     };
 }
 
 function formatWeekendDate(value) {
-    return weekendFormatter.format(new Date(value));
+    return getFormatter({ month: 'short', day: '2-digit' }).format(new Date(value));
 }
 
 function getTimezoneValue() {
@@ -98,8 +93,9 @@ function formatSeasonRange(races) {
     const sorted = [...races].sort((a, b) => new Date(a.start) - new Date(b.start));
     const start = new Date(sorted[0].start);
     const end = new Date(sorted[sorted.length - 1].start);
-    const startLabel = monthFormatter.format(start).toUpperCase();
-    const endLabel = monthFormatter.format(end).toUpperCase();
+    const fmt = getFormatter({ month: 'short' });
+    const startLabel = fmt.format(start).toUpperCase();
+    const endLabel = fmt.format(end).toUpperCase();
     seasonRangeEl.textContent = `${startLabel} - ${endLabel} 2026`;
 }
 
@@ -110,6 +106,9 @@ function getSprintCount(races) {
     }, 0);
 }
 
+// NOTE: The API returns 2 unofficial pre-season Bahrain test/exhibition events
+// before the actual Bahrain Grand Prix. We skip the first two Bahrain entries
+// here until the API exposes an official flag to filter them directly.
 function filterUnofficialRaces(races) {
     let bahrainMatches = 0;
     return races.filter((race) => {
@@ -122,7 +121,12 @@ function filterUnofficialRaces(races) {
 }
 
 function isPastRace(race, now) {
-    return new Date(race.start) < now;
+    // Use the latest session time if available, so a race in progress isn't marked as past
+    const sessionTimes = Object.values(race.sessions).map((t) => new Date(t));
+    const lastSession = sessionTimes.length
+        ? new Date(Math.max(...sessionTimes))
+        : new Date(race.start);
+    return lastSession < now;
 }
 
 function renderSessions(race) {
@@ -198,11 +202,13 @@ function renderRaces(races, nextRaceName) {
         .join('');
 
     raceListEl.querySelectorAll('.race-item').forEach((item) => {
+        const sessions = item.querySelector('.sessions');
+        if (sessions && sessions.classList.contains('open')) {
+            item.classList.add('open');
+        }
+
         item.addEventListener('click', () => {
-            const sessions = item.querySelector('.sessions');
-            if (!sessions) {
-                return;
-            }
+            if (!sessions) return;
             sessions.classList.toggle('open');
             item.classList.toggle('open');
         });
@@ -218,7 +224,9 @@ async function fetchJSON(url) {
             if (payload.detail) {
                 detail = payload.detail;
             }
-        } catch (e) {}
+        } catch (e) {
+            console.warn('Could not parse error response body', e);
+        }
         throw new Error(detail);
     }
     return response.json();
@@ -251,7 +259,17 @@ function toggleTimezonePanel() {
     tzPanel.classList.toggle('active');
 }
 
-tzPill.addEventListener('click', toggleTimezonePanel);
+tzPill.addEventListener('click', (e) => {
+    e.stopPropagation();
+    toggleTimezonePanel();
+});
+
+tzPanel.addEventListener('click', (e) => e.stopPropagation());
+
+document.addEventListener('click', () => {
+    tzPanel.classList.remove('active');
+});
+
 tzApply.addEventListener('click', (event) => {
     event.preventDefault();
     toggleTimezonePanel();
