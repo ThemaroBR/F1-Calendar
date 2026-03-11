@@ -29,6 +29,32 @@ const totalSprintsEl = document.getElementById('total-sprints');
 const seasonRangeEl = document.getElementById('season-range');
 const raceListEl = document.getElementById('race-list');
 
+const _ESCAPE_LOOKUP = {
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;'
+};
+
+function escapeHtml(value) {
+    if (value == null) return '';
+    return String(value).replace(/[&<>"']/g, (match) => _ESCAPE_LOOKUP[match]);
+}
+
+function safeUrl(value) {
+    if (!value) return '';
+    try {
+        const parsed = new URL(value);
+        if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
+            return parsed.toString();
+        }
+    } catch (e) {
+        return '';
+    }
+    return '';
+}
+
 function getFormatter(options) {
     return new Intl.DateTimeFormat([], { timeZone: getDisplayTimezone(), ...options });
 }
@@ -176,26 +202,30 @@ function renderRaceItem(race, index, nextRaceName, now, winnerDriver, driversByS
     const locationLabel = race.country_name || race.track;
     const rowNumber = String(index + 1).padStart(2, '0');
     const winnerCardHtml = past && winnerDriver ? renderWinnerCard(winnerDriver) : '';
+    const safeRaceName = escapeHtml(race.name);
+    const safeTrack = escapeHtml(race.track);
+    const safeLocation = escapeHtml(locationLabel);
+    const safeFlagLabel = escapeHtml(flagLabel);
 
     return `
-        <div class="race-item ${isNext ? 'is-next' : ''} ${past ? 'is-past' : ''}" data-race="${race.name}">
+        <div class="race-item ${isNext ? 'is-next' : ''} ${past ? 'is-past' : ''}" data-race="${safeRaceName}">
             <div class="race-row">
                 <span class="race-num">${rowNumber}</span>
                 <div class="race-info">
-                    <span class="race-name">${race.name} <span class="chevron">></span></span>
+                    <span class="race-name">${safeRaceName} <span class="chevron">></span></span>
                     <span class="race-circuit">
-                        ${flagUrl ? `<img class="track-flag" src="${flagUrl}" alt="${flagLabel}" loading="lazy">` : ''}
-                        <span>${race.track}</span>
+                        ${flagUrl ? `<img class="track-flag" src="${flagUrl}" alt="${safeFlagLabel}" loading="lazy">` : ''}
+                        <span>${safeTrack}</span>
                     </span>
                     ${winnerCardHtml ? `<div class="race-winner">${winnerCardHtml}</div>` : ''}
                 </div>
                 <span class="race-date">${weekendDate}</span>
-                <span class="race-location">${locationLabel}</span>
+                <span class="race-location">${safeLocation}</span>
                 <div class="race-right">
                     ${badges}
                 </div>
             </div>
-            <div class="sessions ${isNext ? 'open' : ''}">
+            <div class="sessions">
                 ${renderSessions(race, driversBySession)}
             </div>
         </div>
@@ -445,10 +475,11 @@ async function fetchAllRaceResults(pastRaces) {
 function renderDriverChip(driver) {
     if (!driver) return '';
     const color = driver.team_colour ? `#${driver.team_colour}` : 'var(--muted)';
+    const safeAcronym = escapeHtml(driver.name_acronym);
     return `
         <span class="driver-chip">
             <span class="driver-chip-bar" style="background:${color}"></span>
-            <span class="driver-chip-acronym" style="color:${color}">${driver.name_acronym}</span>
+            <span class="driver-chip-acronym" style="color:${color}">${safeAcronym}</span>
         </span>
     `;
 }
@@ -456,8 +487,11 @@ function renderDriverChip(driver) {
 function renderWinnerCard(driver) {
     if (!driver) return '';
     const color = driver.team_colour ? `#${driver.team_colour}` : 'var(--muted)';
-    const headshotHtml = driver.headshot_url
-        ? `<img class="winner-headshot" src="${driver.headshot_url}" alt="${driver.full_name}" loading="lazy">`
+    const headshotUrl = safeUrl(driver.headshot_url);
+    const safeFullName = escapeHtml(driver.full_name);
+    const safeTeamName = escapeHtml(driver.team_name);
+    const headshotHtml = headshotUrl
+        ? `<img class="winner-headshot" src="${headshotUrl}" alt="${safeFullName}" loading="lazy">`
         : `<span class="winner-headshot winner-headshot-placeholder"></span>`;
     return `
         <div class="winner-card">
@@ -465,8 +499,8 @@ function renderWinnerCard(driver) {
             ${headshotHtml}
             <span class="winner-bar" style="background:${color}"></span>
             <div class="winner-info">
-                <span class="winner-name">${driver.full_name}</span>
-                <span class="winner-team" style="color:${color}">${driver.team_name}</span>
+                <span class="winner-name">${safeFullName}</span>
+                <span class="winner-team" style="color:${color}">${safeTeamName}</span>
             </div>
         </div>
     `;
@@ -485,7 +519,13 @@ async function fetchAndRender() {
         totalWeekendsEl.textContent = String(filteredRaces.length);
         totalSprintsEl.textContent = String(getSprintCount(filteredRaces));
         formatSeasonRange(filteredRaces);
-        renderRaces(filteredRaces, nextRace ? nextRace.name : null, null);
+
+        // Fetch results for past races to show winners immediately
+        const now = new Date();
+        const pastRaces = filteredRaces.filter(race => isPastRace(race, now));
+        const raceResults = await fetchAllRaceResults(pastRaces);
+
+        renderRaces(filteredRaces, nextRace ? nextRace.name : null, raceResults);
     } catch (error) {
         setStatus(`Could not load schedule: ${error.message}`);
         raceListEl.innerHTML = '<div class="empty-state">No race weekends available right now.</div>';
