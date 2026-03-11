@@ -296,15 +296,46 @@ async function fetchJSON(url) {
 
 const openF1Base = `${apiBase}/openf1`;
 
-async function fetchOpenF1(path) {
-    try {
-        const res = await fetch(openF1Base + path);
-        if (!res.ok) return null;
-        return res.json();
-    } catch (e) {
-        console.warn('OpenF1 fetch failed:', path, e);
-        return null;
+// Request queue to avoid overwhelming the OpenF1 API with concurrent requests
+const _requestQueue = [];
+let _activeRequests = 0;
+const _MAX_CONCURRENT_REQUESTS = 2;
+
+async function _processRequestQueue() {
+    while (_activeRequests < _MAX_CONCURRENT_REQUESTS && _requestQueue.length > 0) {
+        _activeRequests++;
+        const requestFn = _requestQueue.shift();
+        try {
+            await requestFn();
+        } finally {
+            _activeRequests--;
+            _processRequestQueue();
+        }
     }
+}
+
+function _queueOpenF1Request(path) {
+    return new Promise((resolve, reject) => {
+        _requestQueue.push(async () => {
+            try {
+                const res = await fetch(openF1Base + path);
+                if (!res.ok) {
+                    resolve(null);
+                    return;
+                }
+                const data = await res.json();
+                resolve(data);
+            } catch (e) {
+                console.warn('OpenF1 fetch failed:', path, e);
+                resolve(null);
+            }
+        });
+        _processRequestQueue();
+    });
+}
+
+async function fetchOpenF1(path) {
+    return _queueOpenF1Request(path);
 }
 
 async function fetchDriverMap(sessionKey) {
