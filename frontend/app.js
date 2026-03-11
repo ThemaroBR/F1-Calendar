@@ -110,6 +110,17 @@ function getSprintCount(races) {
     }, 0);
 }
 
+function filterUnofficialRaces(races) {
+    let bahrainMatches = 0;
+    return races.filter((race) => {
+        if (/bahrain/i.test(race.name)) {
+            bahrainMatches += 1;
+            return bahrainMatches > 2;
+        }
+        return true;
+    });
+}
+
 function isPastRace(race, now) {
     return new Date(race.start) < now;
 }
@@ -222,10 +233,11 @@ async function fetchAndRender() {
             fetchJSON(apiUrl('/races/next')).catch(() => null)
         ]);
         const sortedRaces = [...races].sort((a, b) => new Date(a.start) - new Date(b.start));
-        totalWeekendsEl.textContent = String(sortedRaces.length);
-        totalSprintsEl.textContent = String(getSprintCount(sortedRaces));
-        formatSeasonRange(sortedRaces);
-        renderRaces(sortedRaces, nextRace ? nextRace.name : null);
+        const filteredRaces = filterUnofficialRaces(sortedRaces);
+        totalWeekendsEl.textContent = String(filteredRaces.length);
+        totalSprintsEl.textContent = String(getSprintCount(filteredRaces));
+        formatSeasonRange(filteredRaces);
+        renderRaces(filteredRaces, nextRace ? nextRace.name : null);
     } catch (error) {
         setStatus(`Could not load schedule: ${error.message}`);
         raceListEl.innerHTML = '<div class="empty-state">No race weekends available right now.</div>';
