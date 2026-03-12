@@ -232,6 +232,16 @@ function renderRaces(races, nextRaceName, raceResults) {
             if (!sessions) return;
 
             const isOpening = !sessions.classList.contains('open');
+            if (isOpening) {
+                raceListEl.querySelectorAll('.race-item.open').forEach((openItem) => {
+                    if (openItem === item) return;
+                    openItem.classList.remove('open');
+                    const openSessions = openItem.querySelector('.sessions');
+                    if (openSessions) {
+                        openSessions.classList.remove('open');
+                    }
+                });
+            }
             sessions.classList.toggle('open');
             item.classList.toggle('open');
 
