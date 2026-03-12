@@ -29,9 +29,23 @@ const seasonRangeEl = document.getElementById('season-range');
 const raceListEl = document.getElementById('race-list');
 
 const PREFETCH_PAST_RESULTS = 0;
+const OPENF1_YEAR = 2026;
 
 const TZ_STORAGE_KEY = 'f1_timezone';
 let currentTimezone = '';
+
+const _ESCAPE_LOOKUP = {
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;'
+};
+
+function escapeHtml(value) {
+    if (value == null) return '';
+    return String(value).replace(/[&<>"']/g, (match) => _ESCAPE_LOOKUP[match]);
+}
 
 function getFormatter(options) {
     return new Intl.DateTimeFormat([], { timeZone: getDisplayTimezone(), ...options });
@@ -83,10 +97,14 @@ function updateTimezoneOptions() {
 
 function setTimezoneValue(value) {
     currentTimezone = value || '';
-    if (currentTimezone) {
-        localStorage.setItem(TZ_STORAGE_KEY, currentTimezone);
-    } else {
-        localStorage.removeItem(TZ_STORAGE_KEY);
+    try {
+        if (currentTimezone) {
+            localStorage.setItem(TZ_STORAGE_KEY, currentTimezone);
+        } else {
+            localStorage.removeItem(TZ_STORAGE_KEY);
+        }
+    } catch (e) {
+        // Ignore storage errors (private mode, quota, etc.)
     }
     updateTimezoneLabel();
     updateTimezoneOptions();
@@ -195,28 +213,30 @@ function renderRaceItem(race, index, nextRaceName, now, podium, driversBySession
     const badge = isNext ? '<span class="badge badge-next">Next</span>' : '';
     const sprint = sprintBadge ? '<span class="badge badge-sprint">Sprint</span>' : '';
     const done = past && (!podium || !podium.length) ? '<span class="badge badge-done">Finished</span>' : '';
-    const badges = `<div class="race-badge">${sprint}${badge}${done}</div>`;
     const locationLabel = race.country_name || race.track;
     const rowNumber = String(index + 1).padStart(2, '0');
     const podiumHtml = past && podium && podium.length ? renderPodium(podium) : '';
+    const safeRaceName = escapeHtml(race.name);
+    const safeTrack = escapeHtml(race.track);
+    const safeLocation = escapeHtml(locationLabel);
+    const safeFlagLabel = escapeHtml(flagLabel);
+    const raceKey = encodeURIComponent(race.name || '');
 
     return `
-        <div class="race-item ${isNext ? 'is-next' : ''} ${past ? 'is-past' : ''}" data-race="${race.name}">
+        <div class="race-item ${isNext ? 'is-next' : ''} ${past ? 'is-past' : ''}" data-race="${raceKey}">
             <div class="race-row">
                 <span class="race-num">${rowNumber}</span>
                 <div class="race-info">
-                    <span class="race-name">${race.name} <span class="chevron">></span></span>
+                    <span class="race-name">${safeRaceName} <span class="chevron">></span></span>
                     <span class="race-circuit">
-                        ${flagUrl ? `<img class="track-flag" src="${flagUrl}" alt="${flagLabel}" loading="lazy">` : ''}
-                        <span>${race.track}</span>
+                        ${flagUrl ? `<img class="track-flag" src="${flagUrl}" alt="${safeFlagLabel}" loading="lazy">` : ''}
+                        <span>${safeTrack}</span>
                     </span>
                 </div>
                 <div class="race-podium-slot">${podiumHtml || ''}</div>
                 <span class="race-date">${weekendDate}</span>
-                <span class="race-location">${locationLabel}</span>
-                <div class="race-right">
-                    ${badges}
-                </div>
+                <span class="race-location">${safeLocation}</span>
+                <div class="race-badge">${sprint}${badge}${done}</div>
             </div>
             <div class="sessions">
                 ${renderSessions(race, driversBySession)}
@@ -247,9 +267,7 @@ function renderRaces(races, nextRaceName, raceResults) {
 
     raceListEl.querySelectorAll('.race-item').forEach((item) => {
         const sessions = item.querySelector('.sessions');
-        if (sessions && sessions.classList.contains('open')) {
-            item.classList.add('open');
-        }
+        // Sessions are always collapsed on fresh render; no open-state to restore.
 
         item.addEventListener('click', async () => {
             if (!sessions) return;
@@ -270,11 +288,12 @@ function renderRaces(races, nextRaceName, raceResults) {
 
             if (!isOpening) return;
 
-            const raceName = item.dataset.race;
+            const raceName = item.dataset.race ? decodeURIComponent(item.dataset.race) : '';
             if (!raceName || _fetchedRaces.has(raceName)) return;
             const race = races.find((r) => r.name === raceName);
             if (!race || !isPastRace(race, now)) return;
 
+            // Mark as fetched optimistically; rolled back on error so the user can retry.
             _fetchedRaces.add(raceName);
             const podiumSlot = item.querySelector('.race-podium-slot');
             if (podiumSlot) {
@@ -299,6 +318,7 @@ function renderRaces(races, nextRaceName, raceResults) {
 
                 sessions.innerHTML = renderSessions(race, result.sessions);
             } catch (e) {
+                _fetchedRaces.delete(raceName);   // allow retry on next expand
                 console.warn('Could not load race results for', raceName, e);
             } finally {
                 loadingRow.remove();
@@ -326,6 +346,7 @@ async function fetchJSON(url) {
 
 const openF1Base = `${apiBase}/openf1`;
 const _openF1Cache = new Map();
+const _OPENF1_CACHE_MAX = 200;
 const _OPENF1_TTL = {
     session_result: 24 * 60 * 60 * 1000,
     drivers: 24 * 60 * 60 * 1000,
@@ -357,7 +378,13 @@ function _cacheGet(path) {
 function _cacheSet(path, data) {
     const resource = _resourceFromPath(path);
     const ttl = _OPENF1_TTL[resource] || _OPENF1_TTL.default;
-    _openF1Cache.set(path, { expiresAt: Date.now() + ttl, data });
+    _openF1Cache.set(path, { expiresAt: Date.now() + ttl, data, touchedAt: Date.now() });
+    if (_openF1Cache.size > _OPENF1_CACHE_MAX) {
+        const entries = Array.from(_openF1Cache.entries());
+        entries.sort((a, b) => a[1].touchedAt - b[1].touchedAt);
+        const toEvict = entries.slice(0, Math.ceil(_OPENF1_CACHE_MAX * 0.2));
+        toEvict.forEach(([key]) => _openF1Cache.delete(key));
+    }
 }
 
 async function _processRequestQueue() {
@@ -401,8 +428,6 @@ function _queueOpenF1Request(path) {
             } catch (e) {
                 console.warn('OpenF1 fetch failed:', path, e);
                 resolve(null);
-            } finally {
-                _processRequestQueue();
             }
         });
         _processRequestQueue();
@@ -493,7 +518,7 @@ async function fetchMeetingKey(race) {
     if (race.meeting_key) {
         return race.meeting_key;
     }
-    const data = await fetchOpenF1('/meetings?year=2026');
+    const data = await fetchOpenF1(`/meetings?year=${OPENF1_YEAR}`);
     if (!data) return null;
     const normalized = race.name.toLowerCase().replace(/\s+grand\s+prix/i, '').trim();
     const match = data.find((meeting) => {
@@ -630,9 +655,13 @@ tzOptions.forEach((option) => {
 });
 
 
-const storedTimezone = localStorage.getItem(TZ_STORAGE_KEY);
-if (storedTimezone) {
-    currentTimezone = storedTimezone;
+try {
+    const storedTimezone = localStorage.getItem(TZ_STORAGE_KEY);
+    if (storedTimezone) {
+        currentTimezone = storedTimezone;
+    }
+} catch (e) {
+    currentTimezone = '';
 }
 updateTimezoneLabel();
 updateTimezoneOptions();
