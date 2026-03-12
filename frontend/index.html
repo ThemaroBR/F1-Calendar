@@ -16,33 +16,33 @@
         <nav>
             <a href="#" class="active">Races</a>
         </nav>
-        <div class="tz-pill" id="tz-pill">
-            <span class="tz-dot"></span>
-            <span id="tz-label">Local timezone</span>
-            <span>&#x25BE;</span>
+        <div class="tz-wrap">
+            <div class="tz-pill" id="tz-pill">
+                <span class="tz-dot"></span>
+                <span id="tz-label">Local timezone</span>
+                <span>&#x25BE;</span>
+            </div>
+            <div class="tz-panel" id="tz-panel" role="listbox" aria-label="Timezone">
+                <span class="tz-panel-label">Timezone</span>
+                <div class="tz-options">
+                    <button class="tz-option" type="button" data-value="">Browser local timezone</button>
+                    <button class="tz-option" type="button" data-value="America/Sao_Paulo">America/Sao_Paulo</button>
+                    <button class="tz-option" type="button" data-value="America/New_York">America/New_York</button>
+                    <button class="tz-option" type="button" data-value="America/Los_Angeles">America/Los_Angeles</button>
+                    <button class="tz-option" type="button" data-value="Europe/London">Europe/London</button>
+                    <button class="tz-option" type="button" data-value="Europe/Paris">Europe/Paris</button>
+                    <button class="tz-option" type="button" data-value="Europe/Berlin">Europe/Berlin</button>
+                    <button class="tz-option" type="button" data-value="Europe/Rome">Europe/Rome</button>
+                    <button class="tz-option" type="button" data-value="Europe/Madrid">Europe/Madrid</button>
+                    <button class="tz-option" type="button" data-value="Asia/Tokyo">Asia/Tokyo</button>
+                    <button class="tz-option" type="button" data-value="Asia/Singapore">Asia/Singapore</button>
+                    <button class="tz-option" type="button" data-value="Asia/Dubai">Asia/Dubai</button>
+                    <button class="tz-option" type="button" data-value="Australia/Melbourne">Australia/Melbourne</button>
+                    <button class="tz-option" type="button" data-value="UTC">UTC</button>
+                </div>
+            </div>
         </div>
     </header>
-
-    <div class="tz-panel" id="tz-panel">
-        <label for="tz">Timezone</label>
-        <select id="tz">
-            <option value="">Browser local timezone</option>
-            <option value="America/Sao_Paulo">America/Sao_Paulo</option>
-            <option value="America/New_York">America/New_York</option>
-            <option value="America/Los_Angeles">America/Los_Angeles</option>
-            <option value="Europe/London">Europe/London</option>
-            <option value="Europe/Paris">Europe/Paris</option>
-            <option value="Europe/Berlin">Europe/Berlin</option>
-            <option value="Europe/Rome">Europe/Rome</option>
-            <option value="Europe/Madrid">Europe/Madrid</option>
-            <option value="Asia/Tokyo">Asia/Tokyo</option>
-            <option value="Asia/Singapore">Asia/Singapore</option>
-            <option value="Asia/Dubai">Asia/Dubai</option>
-            <option value="Australia/Melbourne">Australia/Melbourne</option>
-            <option value="UTC">UTC</option>
-        </select>
-        <button id="tz-apply" type="button">Apply</button>
-    </div>
 
     <section class="hero">
         <div class="hero-label">Formula 1 World Championship</div>

@@ -21,13 +21,15 @@ const SESSION_PRIORITY = {
 const tzPill = document.getElementById('tz-pill');
 const tzLabel = document.getElementById('tz-label');
 const tzPanel = document.getElementById('tz-panel');
-const tzSelect = document.getElementById('tz');
-const tzApply = document.getElementById('tz-apply');
+const tzOptions = Array.from(document.querySelectorAll('.tz-option'));
 const statusEl = document.getElementById('status');
 const totalWeekendsEl = document.getElementById('total-weekends');
 const totalSprintsEl = document.getElementById('total-sprints');
 const seasonRangeEl = document.getElementById('season-range');
 const raceListEl = document.getElementById('race-list');
+
+const TZ_STORAGE_KEY = 'f1_timezone';
+let currentTimezone = '';
 
 function getFormatter(options) {
     return new Intl.DateTimeFormat([], { timeZone: getDisplayTimezone(), ...options });
@@ -54,7 +56,7 @@ function formatWeekendDate(value) {
 }
 
 function getTimezoneValue() {
-    return tzSelect.value.trim();
+    return currentTimezone;
 }
 
 function getDisplayTimezone() {
@@ -67,6 +69,25 @@ function getDisplayTimezone() {
 
 function updateTimezoneLabel() {
     tzLabel.textContent = getDisplayTimezone();
+}
+
+function updateTimezoneOptions() {
+    tzOptions.forEach((option) => {
+        const isActive = option.dataset.value === currentTimezone;
+        option.classList.toggle('active', isActive);
+        option.setAttribute('aria-selected', isActive ? 'true' : 'false');
+    });
+}
+
+function setTimezoneValue(value) {
+    currentTimezone = value || '';
+    if (currentTimezone) {
+        localStorage.setItem(TZ_STORAGE_KEY, currentTimezone);
+    } else {
+        localStorage.removeItem(TZ_STORAGE_KEY);
+    }
+    updateTimezoneLabel();
+    updateTimezoneOptions();
 }
 
 function apiUrl(path) {
@@ -529,10 +550,21 @@ document.addEventListener('click', () => {
     tzPanel.classList.remove('active');
 });
 
-tzApply.addEventListener('click', (event) => {
-    event.preventDefault();
-    toggleTimezonePanel();
-    fetchAndRender();
+tzOptions.forEach((option) => {
+    option.addEventListener('click', (event) => {
+        event.preventDefault();
+        setTimezoneValue(option.dataset.value || '');
+        tzPanel.classList.remove('active');
+        fetchAndRender();
+    });
 });
+
+
+const storedTimezone = localStorage.getItem(TZ_STORAGE_KEY);
+if (storedTimezone) {
+    currentTimezone = storedTimezone;
+}
+updateTimezoneLabel();
+updateTimezoneOptions();
 
 fetchAndRender();

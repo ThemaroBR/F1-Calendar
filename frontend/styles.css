@@ -136,16 +136,23 @@ nav a.active {
     background: var(--red);
 }
 
+.tz-wrap {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
 .tz-panel {
     position: absolute;
-    right: 48px;
-    top: 64px;
+    right: 0;
+    top: calc(100% + 8px);
     background: var(--surface-2);
     border: 1px solid var(--border);
     padding: 12px;
     display: none;
-    gap: 8px;
-    align-items: center;
+    flex-direction: column;
+    gap: 10px;
+    align-items: stretch;
     z-index: 101;
 }
 
@@ -153,7 +160,7 @@ nav a.active {
     display: flex;
 }
 
-.tz-panel label {
+.tz-panel-label {
     font-family: "Barlow Condensed", sans-serif;
     font-size: 11px;
     letter-spacing: 0.2em;
@@ -161,28 +168,37 @@ nav a.active {
     color: var(--muted);
 }
 
-.tz-panel select {
-    min-width: 220px;
-    height: 32px;
-    background: var(--surface);
-    border: 1px solid var(--border-bright);
-    color: var(--white);
-    font-family: "DM Mono", monospace;
-    font-size: 11px;
-    padding: 0 8px;
+.tz-options {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-height: 260px;
+    overflow-y: auto;
+    padding-right: 4px;
 }
 
-.tz-panel button {
-    height: 32px;
-    border: 0;
-    padding: 0 12px;
-    background: var(--red);
-    color: var(--white);
-    font-family: "Barlow Condensed", sans-serif;
-    font-size: 12px;
-    letter-spacing: 0.15em;
-    text-transform: uppercase;
+.tz-option {
+    min-width: 220px;
+    text-align: left;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--muted);
+    font-family: "DM Mono", monospace;
+    font-size: 11px;
+    padding: 8px 10px;
     cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.tz-option:hover {
+    border-color: var(--border-bright);
+    color: var(--white);
+}
+
+.tz-option.active {
+    border-color: var(--red);
+    color: var(--white);
+    background: rgba(232, 0, 45, 0.1);
 }
 
 .hero {
@@ -758,6 +774,6 @@ h1 em {
     }
 
     .tz-panel {
-        right: 24px;
+        right: 0;
     }
 }
