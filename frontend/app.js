@@ -218,7 +218,7 @@ function renderRaceItem(race, index, nextRaceName, now, podium, driversBySession
                     ${badges}
                 </div>
             </div>
-            <div class="sessions ${isNext ? 'open' : ''}">
+            <div class="sessions">
                 ${renderSessions(race, driversBySession)}
             </div>
         </div>
