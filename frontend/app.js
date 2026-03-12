@@ -29,32 +29,6 @@ const totalSprintsEl = document.getElementById('total-sprints');
 const seasonRangeEl = document.getElementById('season-range');
 const raceListEl = document.getElementById('race-list');
 
-const _ESCAPE_LOOKUP = {
-    '&': '&amp;',
-    '<': '&lt;',
-    '>': '&gt;',
-    '"': '&quot;',
-    "'": '&#39;'
-};
-
-function escapeHtml(value) {
-    if (value == null) return '';
-    return String(value).replace(/[&<>"']/g, (match) => _ESCAPE_LOOKUP[match]);
-}
-
-function safeUrl(value) {
-    if (!value) return '';
-    try {
-        const parsed = new URL(value);
-        if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
-            return parsed.toString();
-        }
-    } catch (e) {
-        return '';
-    }
-    return '';
-}
-
 function getFormatter(options) {
     return new Intl.DateTimeFormat([], { timeZone: getDisplayTimezone(), ...options });
 }
@@ -188,7 +162,7 @@ function renderSessions(race, driversBySession) {
     }).join('');
 }
 
-function renderRaceItem(race, index, nextRaceName, now, winnerDriver, driversBySession) {
+function renderRaceItem(race, index, nextRaceName, now, podium, driversBySession) {
     const weekendDate = formatWeekendDate(race.start);
     const flagUrl = flagUrlForRace(race);
     const flagLabel = race.country_name ? `${race.country_name} flag` : 'Country flag';
@@ -197,35 +171,31 @@ function renderRaceItem(race, index, nextRaceName, now, winnerDriver, driversByS
     const past = isPastRace(race, now);
     const badge = isNext ? '<span class="badge badge-next">Next</span>' : '';
     const sprint = sprintBadge ? '<span class="badge badge-sprint">Sprint</span>' : '';
-    const done = past && !winnerDriver ? '<span class="badge badge-done">Finished</span>' : '';
+    const done = past && (!podium || !podium.length) ? '<span class="badge badge-done">Finished</span>' : '';
     const badges = `<div class="race-badge">${sprint}${badge}${done}</div>`;
     const locationLabel = race.country_name || race.track;
     const rowNumber = String(index + 1).padStart(2, '0');
-    const winnerCardHtml = past && winnerDriver ? renderWinnerCard(winnerDriver) : '';
-    const safeRaceName = escapeHtml(race.name);
-    const safeTrack = escapeHtml(race.track);
-    const safeLocation = escapeHtml(locationLabel);
-    const safeFlagLabel = escapeHtml(flagLabel);
+    const podiumHtml = past && podium && podium.length ? renderPodium(podium) : '';
 
     return `
-        <div class="race-item ${isNext ? 'is-next' : ''} ${past ? 'is-past' : ''}" data-race="${safeRaceName}">
+        <div class="race-item ${isNext ? 'is-next' : ''} ${past ? 'is-past' : ''}" data-race="${race.name}">
             <div class="race-row">
                 <span class="race-num">${rowNumber}</span>
                 <div class="race-info">
-                    <span class="race-name">${safeRaceName} <span class="chevron">></span></span>
+                    <span class="race-name">${race.name} <span class="chevron">></span></span>
                     <span class="race-circuit">
-                        ${flagUrl ? `<img class="track-flag" src="${flagUrl}" alt="${safeFlagLabel}" loading="lazy">` : ''}
-                        <span>${safeTrack}</span>
+                        ${flagUrl ? `<img class="track-flag" src="${flagUrl}" alt="${flagLabel}" loading="lazy">` : ''}
+                        <span>${race.track}</span>
                     </span>
-                    ${winnerCardHtml ? `<div class="race-winner">${winnerCardHtml}</div>` : ''}
                 </div>
+                <div class="race-podium-slot">${podiumHtml || ''}</div>
                 <span class="race-date">${weekendDate}</span>
-                <span class="race-location">${safeLocation}</span>
+                <span class="race-location">${locationLabel}</span>
                 <div class="race-right">
                     ${badges}
                 </div>
             </div>
-            <div class="sessions">
+            <div class="sessions ${isNext ? 'open' : ''}">
                 ${renderSessions(race, driversBySession)}
             </div>
         </div>
@@ -246,9 +216,9 @@ function renderRaces(races, nextRaceName, raceResults) {
     raceListEl.innerHTML = races
         .map((race, index) => {
             const result = raceResults ? raceResults[race.name] : null;
-            const winnerDriver = result ? result.winner : null;
+            const podium = result ? result.podium : null;
             const driversBySession = result ? result.sessions : null;
-            return renderRaceItem(race, index, nextRaceName, now, winnerDriver, driversBySession);
+            return renderRaceItem(race, index, nextRaceName, now, podium, driversBySession);
         })
         .join('');
 
@@ -265,6 +235,7 @@ function renderRaces(races, nextRaceName, raceResults) {
             sessions.classList.toggle('open');
             item.classList.toggle('open');
 
+            // Only fetch results when expanding a past race for the first time
             if (!isOpening) return;
             const raceName = item.dataset.race;
             if (!raceName || _fetchedRaces.has(raceName)) return;
@@ -273,9 +244,10 @@ function renderRaces(races, nextRaceName, raceResults) {
 
             _fetchedRaces.add(raceName);
 
+            // Show a subtle loading indicator inside the sessions panel
             const loadingRow = document.createElement('div');
             loadingRow.className = 'session-row session-loading';
-            loadingRow.innerHTML = '<span></span><span class="session-name" style="color:var(--muted)">Loading results...</span>';
+            loadingRow.innerHTML = '<span></span><span class="session-name" style="color:var(--muted)">Loading results\u2026</span>';
             sessions.prepend(loadingRow);
 
             try {
@@ -283,20 +255,15 @@ function renderRaces(races, nextRaceName, raceResults) {
                 if (!meetingKey) return;
                 const result = await fetchRaceResults(race, meetingKey);
 
-                const winnerSlot = item.querySelector('.race-winner');
-                const winnerHtml = result.winner ? renderWinnerCard(result.winner) : '';
-                if (winnerSlot) {
-                    winnerSlot.innerHTML = winnerHtml;
-                } else if (winnerHtml) {
-                    const raceInfo = item.querySelector('.race-info');
-                    if (raceInfo) {
-                        const div = document.createElement('div');
-                        div.className = 'race-winner';
-                        div.innerHTML = winnerHtml;
-                        raceInfo.appendChild(div);
-                    }
+                // Update the podium slot in place
+                const podiumSlot = item.querySelector('.race-podium-slot');
+                if (podiumSlot) {
+                    podiumSlot.innerHTML = result.podium && result.podium.length
+                        ? renderPodium(result.podium)
+                        : '';
                 }
 
+                // Replace session rows with enriched version including driver chips
                 sessions.innerHTML = renderSessions(race, result.sessions);
             } catch (e) {
                 console.warn('Could not load race results for', raceName, e);
@@ -326,46 +293,15 @@ async function fetchJSON(url) {
 
 const openF1Base = `${apiBase}/openf1`;
 
-// Request queue to avoid overwhelming the OpenF1 API with concurrent requests
-const _requestQueue = [];
-let _activeRequests = 0;
-const _MAX_CONCURRENT_REQUESTS = 2;
-
-async function _processRequestQueue() {
-    while (_activeRequests < _MAX_CONCURRENT_REQUESTS && _requestQueue.length > 0) {
-        _activeRequests++;
-        const requestFn = _requestQueue.shift();
-        try {
-            await requestFn();
-        } finally {
-            _activeRequests--;
-            _processRequestQueue();
-        }
-    }
-}
-
-function _queueOpenF1Request(path) {
-    return new Promise((resolve, reject) => {
-        _requestQueue.push(async () => {
-            try {
-                const res = await fetch(openF1Base + path);
-                if (!res.ok) {
-                    resolve(null);
-                    return;
-                }
-                const data = await res.json();
-                resolve(data);
-            } catch (e) {
-                console.warn('OpenF1 fetch failed:', path, e);
-                resolve(null);
-            }
-        });
-        _processRequestQueue();
-    });
-}
-
 async function fetchOpenF1(path) {
-    return _queueOpenF1Request(path);
+    try {
+        const res = await fetch(openF1Base + path);
+        if (!res.ok) return null;
+        return res.json();
+    } catch (e) {
+        console.warn('OpenF1 fetch failed:', path, e);
+        return null;
+    }
 }
 
 async function fetchDriverMap(sessionKey) {
@@ -374,11 +310,17 @@ async function fetchDriverMap(sessionKey) {
     return Object.fromEntries(data.map((driver) => [driver.driver_number, driver]));
 }
 
-async function fetchRaceWinner(raceSessionKey) {
-    const results = await fetchOpenF1(`/session_result?session_key=${raceSessionKey}&position=1`);
-    if (!results || !results.length) return null;
-    const driverMap = await fetchDriverMap(raceSessionKey);
-    return driverMap[results[0].driver_number] || null;
+async function fetchPodium(raceSessionKey) {
+    const [results, driverMap] = await Promise.all([
+        fetchOpenF1(`/session_result?session_key=${raceSessionKey}`),
+        fetchDriverMap(raceSessionKey)
+    ]);
+    if (!results || !results.length) return [];
+    return [1, 2, 3]
+        .map((pos) => results.find((r) => r.position === pos))
+        .filter(Boolean)
+        .map((r) => driverMap[r.driver_number] || null)
+        .filter(Boolean);
 }
 
 async function fetchFastestDriver(sessionKey, sessionName) {
@@ -432,13 +374,18 @@ async function fetchRaceResults(race, meetingKey) {
 
     const sessionMetas = (await Promise.all(openF1SessionFetches)).filter(Boolean);
     await Promise.all(sessionMetas.map(async ({ sessionName, sessionKey }) => {
-        const driver = sessionName === 'Race'
-            ? await fetchRaceWinner(sessionKey)
-            : await fetchFastestDriver(sessionKey, sessionName);
-        if (driver) sessionResults[sessionName] = driver;
+        if (sessionName === 'Race') {
+            const podium = await fetchPodium(sessionKey);
+            if (podium.length) sessionResults[sessionName] = podium[0];
+            sessionResults.__podium = podium;
+        } else {
+            const driver = await fetchFastestDriver(sessionKey, sessionName);
+            if (driver) sessionResults[sessionName] = driver;
+        }
     }));
 
     return {
+        podium: sessionResults.__podium || [],
         winner: sessionResults.Race || null,
         sessions: sessionResults
     };
@@ -475,33 +422,54 @@ async function fetchAllRaceResults(pastRaces) {
 function renderDriverChip(driver) {
     if (!driver) return '';
     const color = driver.team_colour ? `#${driver.team_colour}` : 'var(--muted)';
-    const safeAcronym = escapeHtml(driver.name_acronym);
     return `
         <span class="driver-chip">
             <span class="driver-chip-bar" style="background:${color}"></span>
-            <span class="driver-chip-acronym" style="color:${color}">${safeAcronym}</span>
+            <span class="driver-chip-acronym" style="color:${color}">${driver.name_acronym}</span>
         </span>
     `;
 }
 
-function renderWinnerCard(driver) {
-    if (!driver) return '';
-    const color = driver.team_colour ? `#${driver.team_colour}` : 'var(--muted)';
-    const headshotUrl = safeUrl(driver.headshot_url);
-    const safeFullName = escapeHtml(driver.full_name);
-    const safeTeamName = escapeHtml(driver.team_name);
-    const headshotHtml = headshotUrl
-        ? `<img class="winner-headshot" src="${headshotUrl}" alt="${safeFullName}" loading="lazy">`
-        : `<span class="winner-headshot winner-headshot-placeholder"></span>`;
-    return `
-        <div class="winner-card">
-            <span class="winner-label">Winner</span>
-            ${headshotHtml}
-            <span class="winner-bar" style="background:${color}"></span>
-            <div class="winner-info">
-                <span class="winner-name">${safeFullName}</span>
-                <span class="winner-team" style="color:${color}">${safeTeamName}</span>
+function renderPodium(podium) {
+    if (!podium || !podium.length) return '';
+
+    const [p1, p2, p3] = podium;
+
+    function headshot(driver, cls) {
+        return driver.headshot_url
+            ? `<img class="${cls}" src="${driver.headshot_url}" alt="${driver.full_name}" loading="lazy">`
+            : `<span class="${cls}-placeholder"></span>`;
+    }
+
+    const p1Color = p1.team_colour ? `#${p1.team_colour}` : 'var(--accent)';
+
+    const othersHtml = [p2, p3].filter(Boolean).map((driver, i) => {
+        const pos = i + 2;
+        const color = driver.team_colour ? `#${driver.team_colour}` : 'var(--muted)';
+        return `
+            <div class="podium-entry">
+                <span class="podium-entry-bar" style="--entry-color:${color}; background:${color}"></span>
+                ${headshot(driver, 'podium-entry-headshot')}
+                <span class="podium-entry-pos">${pos}</span>
+                <div class="podium-entry-info">
+                    <span class="podium-entry-name">${driver.full_name}</span>
+                    <span class="podium-entry-team" style="color:${color}">${driver.team_name}</span>
+                </div>
             </div>
+        `;
+    }).join('');
+
+    return `
+        <div class="race-podium">
+            <div class="podium-p1" style="--p1-color:${p1Color}">
+                ${headshot(p1, 'podium-p1-headshot')}
+                <div class="podium-p1-info">
+                    <span class="podium-p1-pos" style="color:${p1Color}">&#9651; Winner</span>
+                    <span class="podium-p1-name">${p1.full_name}</span>
+                    <span class="podium-p1-team" style="color:${p1Color}">${p1.team_name}</span>
+                </div>
+            </div>
+            ${othersHtml ? `<div class="podium-divider"></div><div class="podium-others">${othersHtml}</div>` : ''}
         </div>
     `;
 }
@@ -519,13 +487,14 @@ async function fetchAndRender() {
         totalWeekendsEl.textContent = String(filteredRaces.length);
         totalSprintsEl.textContent = String(getSprintCount(filteredRaces));
         formatSeasonRange(filteredRaces);
+        renderRaces(filteredRaces, nextRace ? nextRace.name : null, null);
 
-        // Fetch results for past races to show winners immediately
         const now = new Date();
-        const pastRaces = filteredRaces.filter(race => isPastRace(race, now));
-        const raceResults = await fetchAllRaceResults(pastRaces);
-
-        renderRaces(filteredRaces, nextRace ? nextRace.name : null, raceResults);
+        const pastRaces = filteredRaces.filter((race) => isPastRace(race, now));
+        if (pastRaces.length) {
+            const raceResults = await fetchAllRaceResults(pastRaces);
+            renderRaces(filteredRaces, nextRace ? nextRace.name : null, raceResults);
+        }
     } catch (error) {
         setStatus(`Could not load schedule: ${error.message}`);
         raceListEl.innerHTML = '<div class="empty-state">No race weekends available right now.</div>';
