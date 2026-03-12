@@ -28,6 +28,8 @@ const totalSprintsEl = document.getElementById('total-sprints');
 const seasonRangeEl = document.getElementById('season-range');
 const raceListEl = document.getElementById('race-list');
 
+const PREFETCH_PAST_RESULTS = 0;
+
 const TZ_STORAGE_KEY = 'f1_timezone';
 let currentTimezone = '';
 
@@ -266,16 +268,19 @@ function renderRaces(races, nextRaceName, raceResults) {
             sessions.classList.toggle('open');
             item.classList.toggle('open');
 
-            // Only fetch results when expanding a past race for the first time
             if (!isOpening) return;
+
             const raceName = item.dataset.race;
             if (!raceName || _fetchedRaces.has(raceName)) return;
             const race = races.find((r) => r.name === raceName);
             if (!race || !isPastRace(race, now)) return;
 
             _fetchedRaces.add(raceName);
+            const podiumSlot = item.querySelector('.race-podium-slot');
+            if (podiumSlot) {
+                podiumSlot.innerHTML = '<div class="race-podium podium-skeleton"></div>';
+            }
 
-            // Show a subtle loading indicator inside the sessions panel
             const loadingRow = document.createElement('div');
             loadingRow.className = 'session-row session-loading';
             loadingRow.innerHTML = '<span></span><span class="session-name" style="color:var(--muted)">Loading results\u2026</span>';
@@ -286,15 +291,12 @@ function renderRaces(races, nextRaceName, raceResults) {
                 if (!meetingKey) return;
                 const result = await fetchRaceResults(race, meetingKey);
 
-                // Update the podium slot in place
-                const podiumSlot = item.querySelector('.race-podium-slot');
                 if (podiumSlot) {
                     podiumSlot.innerHTML = result.podium && result.podium.length
                         ? renderPodium(result.podium)
                         : '';
                 }
 
-                // Replace session rows with enriched version including driver chips
                 sessions.innerHTML = renderSessions(race, result.sessions);
             } catch (e) {
                 console.warn('Could not load race results for', raceName, e);
@@ -323,16 +325,92 @@ async function fetchJSON(url) {
 }
 
 const openF1Base = `${apiBase}/openf1`;
+const _openF1Cache = new Map();
+const _OPENF1_TTL = {
+    session_result: 24 * 60 * 60 * 1000,
+    drivers: 24 * 60 * 60 * 1000,
+    sessions: 60 * 60 * 1000,
+    meetings: 60 * 60 * 1000,
+    laps: 24 * 60 * 60 * 1000,
+    default: 5 * 60 * 1000
+};
+const _requestQueue = [];
+let _activeRequests = 0;
+const _MAX_CONCURRENT_REQUESTS = 1;
+const _MIN_REQUEST_GAP_MS = 400;
+let _lastRequestTime = 0;
+let _backoffUntil = 0;
+
+function _resourceFromPath(path) {
+    const match = path.match(/^\/([^?]+)/);
+    return match ? match[1] : '';
+}
+
+function _cacheGet(path) {
+    const entry = _openF1Cache.get(path);
+    if (!entry) return null;
+    if (Date.now() < entry.expiresAt) return entry.data;
+    _openF1Cache.delete(path);
+    return null;
+}
+
+function _cacheSet(path, data) {
+    const resource = _resourceFromPath(path);
+    const ttl = _OPENF1_TTL[resource] || _OPENF1_TTL.default;
+    _openF1Cache.set(path, { expiresAt: Date.now() + ttl, data });
+}
+
+async function _processRequestQueue() {
+    while (_activeRequests < _MAX_CONCURRENT_REQUESTS && _requestQueue.length > 0) {
+        if (Date.now() < _backoffUntil) {
+            const wait = _backoffUntil - Date.now();
+            await new Promise((resolve) => setTimeout(resolve, wait));
+        }
+        _activeRequests++;
+        const requestFn = _requestQueue.shift();
+        try {
+            await requestFn();
+        } finally {
+            _activeRequests--;
+        }
+    }
+}
+
+function _queueOpenF1Request(path) {
+    const cached = _cacheGet(path);
+    if (cached) return Promise.resolve(cached);
+    return new Promise((resolve) => {
+        _requestQueue.push(async () => {
+            try {
+                const sinceLast = Date.now() - _lastRequestTime;
+                if (sinceLast < _MIN_REQUEST_GAP_MS) {
+                    await new Promise((r) => setTimeout(r, _MIN_REQUEST_GAP_MS - sinceLast));
+                }
+                const res = await fetch(openF1Base + path);
+                _lastRequestTime = Date.now();
+                if (!res.ok) {
+                    if (res.status === 429) {
+                        _backoffUntil = Date.now() + 30000;
+                    }
+                    resolve(null);
+                    return;
+                }
+                const data = await res.json();
+                _cacheSet(path, data);
+                resolve(data);
+            } catch (e) {
+                console.warn('OpenF1 fetch failed:', path, e);
+                resolve(null);
+            } finally {
+                _processRequestQueue();
+            }
+        });
+        _processRequestQueue();
+    });
+}
 
 async function fetchOpenF1(path) {
-    try {
-        const res = await fetch(openF1Base + path);
-        if (!res.ok) return null;
-        return res.json();
-    } catch (e) {
-        console.warn('OpenF1 fetch failed:', path, e);
-        return null;
-    }
+    return _queueOpenF1Request(path);
 }
 
 async function fetchDriverMap(sessionKey) {
@@ -354,22 +432,11 @@ async function fetchPodium(raceSessionKey) {
         .filter(Boolean);
 }
 
-async function fetchFastestDriver(sessionKey, sessionName) {
-    const isQual = sessionName === 'Qualifying' || sessionName === 'Sprint Qualifying';
-    if (isQual) {
-        const results = await fetchOpenF1(`/session_result?session_key=${sessionKey}&position=1`);
-        if (!results || !results.length) return null;
-        const driverMap = await fetchDriverMap(sessionKey);
-        return driverMap[results[0].driver_number] || null;
-    }
-    const laps = await fetchOpenF1(`/laps?session_key=${sessionKey}`);
-    if (!laps || !laps.length) return null;
-    const validLaps = laps.filter((lap) => lap.lap_duration != null && lap.lap_duration > 0);
-    if (!validLaps.length) return null;
-    validLaps.sort((a, b) => a.lap_duration - b.lap_duration);
-    const fastest = validLaps[0];
+async function fetchFastestDriver(sessionKey) {
+    const results = await fetchOpenF1(`/session_result?session_key=${sessionKey}&position=1`);
+    if (!results || !results.length) return null;
     const driverMap = await fetchDriverMap(sessionKey);
-    return driverMap[fastest.driver_number] || null;
+    return driverMap[results[0].driver_number] || null;
 }
 
 const DRIVER_STAT_SESSIONS = new Set([
@@ -410,7 +477,7 @@ async function fetchRaceResults(race, meetingKey) {
             if (podium.length) sessionResults[sessionName] = podium[0];
             sessionResults.__podium = podium;
         } else {
-            const driver = await fetchFastestDriver(sessionKey, sessionName);
+            const driver = await fetchFastestDriver(sessionKey);
             if (driver) sessionResults[sessionName] = driver;
         }
     }));
@@ -522,8 +589,11 @@ async function fetchAndRender() {
 
         const now = new Date();
         const pastRaces = filteredRaces.filter((race) => isPastRace(race, now));
-        if (pastRaces.length) {
-            const raceResults = await fetchAllRaceResults(pastRaces);
+        const racesToPrefetch = PREFETCH_PAST_RESULTS > 0
+            ? pastRaces.slice(-PREFETCH_PAST_RESULTS)
+            : [];
+        if (racesToPrefetch.length) {
+            const raceResults = await fetchAllRaceResults(racesToPrefetch);
             renderRaces(filteredRaces, nextRace ? nextRace.name : null, raceResults);
         }
     } catch (error) {
