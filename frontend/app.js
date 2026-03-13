@@ -102,6 +102,23 @@ function getLiveSessionName(race, now) {
     return '';
 }
 
+function isWeekendLive(race, now) {
+    const entries = Object.entries(race.sessions);
+    if (!entries.length) return false;
+    let minStart = null;
+    let maxEnd = null;
+    for (const [name, when] of entries) {
+        const start = new Date(when);
+        if (Number.isNaN(start.getTime())) continue;
+        const durationMs = getSessionDurationMinutes(name) * 60 * 1000;
+        const end = new Date(start.getTime() + durationMs);
+        if (!minStart || start < minStart) minStart = start;
+        if (!maxEnd || end > maxEnd) maxEnd = end;
+    }
+    if (!minStart || !maxEnd) return false;
+    return now >= minStart && now <= maxEnd;
+}
+
 function getTimezoneValue() {
     return currentTimezone;
 }
@@ -656,7 +673,7 @@ async function fetchAndRender() {
         const nextRaceName = filteredRaces.find((race) => new Date(race.start) > now)?.name || null;
         const liveRace = forceLive
             ? (filteredRaces.find((race) => race.name === nextRaceName) || filteredRaces[0] || null)
-            : (filteredRaces.find((race) => getLiveSessionName(race, now)) || null);
+            : (filteredRaces.find((race) => isWeekendLive(race, now)) || null);
         const liveRaceName = liveRace ? liveRace.name : null;
         const liveSessionName = liveRace ? (forceLive ? '' : getLiveSessionName(liveRace, now)) : '';
         totalWeekendsEl.textContent = String(filteredRaces.length);
