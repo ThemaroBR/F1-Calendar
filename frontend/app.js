@@ -239,15 +239,13 @@ function renderRaceItem(race, index, nextRaceName, now, podium, driversBySession
     const flagUrl = flagUrlForRace(race);
     const flagLabel = race.country_name ? `${race.country_name} flag` : 'Country flag';
     const sprintBadge = Object.keys(race.sessions).some((name) => normalizeSessionLabel(name).includes('Sprint'));
-    const isNext = nextRaceName && race.name === nextRaceName;
     const past = isPastRace(race, now);
-    const badge = isNext ? '<span class="badge badge-next">Next</span>' : '';
     const sprint = sprintBadge ? '<span class="badge badge-sprint">Sprint</span>' : '';
     const liveBadge = isLive
         ? '<a class="badge badge-live" href="https://www.formula1.com/" target="_blank" rel="noopener"><span class="badge-live-dot"></span>Live</a>'
         : '';
     const done = past && (!podium || !podium.length) ? '<span class="badge badge-done">Finished</span>' : '';
-    const badges = isLive ? `${liveBadge}` : `${sprint}${badge}${done}`;
+    const badges = isLive ? `${liveBadge}` : `${sprint}${done}`;
     const locationLabel = race.country_name || race.track;
     const rowNumber = String(index + 1).padStart(2, '0');
     const podiumHtml = past && podium && podium.length ? renderPodium(podium) : '';
@@ -258,7 +256,7 @@ function renderRaceItem(race, index, nextRaceName, now, podium, driversBySession
     const raceKey = encodeURIComponent(race.name || '');
 
     return `
-        <div class="race-item ${isNext ? 'is-next' : ''} ${past ? 'is-past' : ''} ${isLive ? 'is-live' : ''}" data-race="${raceKey}">
+        <div class="race-item ${past ? 'is-past' : ''} ${isLive ? 'is-live' : ''}" data-race="${raceKey}">
             <div class="race-row">
                 <span class="race-num">${rowNumber}</span>
                 <div class="race-info">

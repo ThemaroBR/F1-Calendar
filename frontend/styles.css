@@ -381,10 +381,6 @@ h1 em {
     border-radius: 2px;
 }
 
-.badge-next {
-    background: var(--red);
-    color: var(--white);
-}
 
 .badge-sprint {
     background: transparent;
@@ -510,11 +506,6 @@ h1 em {
     transform: rotate(90deg);
 }
 
-.race-item.is-next {
-    background: linear-gradient(90deg, rgba(232, 0, 45, 0.06) 0%, transparent 60%);
-    border-left: 2px solid var(--red);
-    margin-left: -2px;
-}
 
 .race-item.is-past {
     opacity: 0.45;
@@ -842,10 +833,6 @@ h1 em {
         display: flex;
         justify-self: start;
         margin-top: 8px;
-    }
-
-    .race-meta {
-        justify-self: start;
     }
 
     .race-podium-slot {
