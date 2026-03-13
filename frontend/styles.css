@@ -395,6 +395,67 @@ h1 em {
     border: 1px solid var(--border);
 }
 
+.badge-live {
+    background: var(--red);
+    color: var(--white);
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    display: inline-flex;
+    align-items: center;
+    text-decoration: none;
+}
+
+.badge-live-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--white);
+    box-shadow: 0 0 8px rgba(255, 255, 255, 0.8);
+    animation: pulse 1.2s ease-in-out infinite;
+}
+
+.live-row {
+    border-top: 1px solid rgba(232, 0, 45, 0.25);
+    background: rgba(232, 0, 45, 0.08);
+}
+
+.live-row-link {
+    display: grid;
+    grid-template-columns: 16px auto auto 1fr auto;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 48px;
+    color: var(--white);
+    text-decoration: none;
+    font-family: "DM Mono", monospace;
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+}
+
+.live-row-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--red);
+    box-shadow: 0 0 8px rgba(232, 0, 45, 0.6);
+    animation: pulse 1.2s ease-in-out infinite;
+}
+
+.live-row-label {
+    color: var(--red);
+}
+
+.live-row-cta {
+    color: var(--muted);
+}
+
+.live-row-arrow {
+    justify-self: end;
+    color: var(--white);
+}
+
 .sessions {
     overflow: hidden;
     max-height: 0;
@@ -479,6 +540,21 @@ h1 em {
     to {
         opacity: 1;
         transform: translateY(0);
+    }
+}
+
+@keyframes pulse {
+    0% {
+        transform: scale(1);
+        opacity: 0.7;
+    }
+    50% {
+        transform: scale(1.25);
+        opacity: 1;
+    }
+    100% {
+        transform: scale(1);
+        opacity: 0.7;
     }
 }
 
@@ -741,6 +817,7 @@ h1 em {
         display: none;
     }
 
+
     .list-header,
     .race-row,
     .session-row {
@@ -759,6 +836,12 @@ h1 em {
         display: none;
     }
 
+    .race-item.is-live .race-badge {
+        display: flex;
+        justify-self: start;
+        margin-top: 8px;
+    }
+
     .race-meta {
         justify-self: start;
     }
@@ -771,6 +854,15 @@ h1 em {
 
     .race-podium {
         max-width: 100%;
+    }
+
+    .live-row-link {
+        padding: 12px 24px;
+        grid-template-columns: 16px auto 1fr auto;
+    }
+
+    .live-row-cta {
+        display: none;
     }
 
     .tz-panel {

@@ -71,6 +71,37 @@ function formatWeekendDate(value) {
     return getFormatter({ month: 'short', day: '2-digit' }).format(new Date(value));
 }
 
+function isForceLiveEnabled() {
+    try {
+        const params = new URLSearchParams(window.location.search);
+        return params.get('force_live') === '1';
+    } catch (e) {
+        return false;
+    }
+}
+
+function getSessionDurationMinutes(sessionName) {
+    const normalized = normalizeSessionLabel(sessionName);
+    if (normalized === 'Race') return 120;
+    if (normalized === 'Sprint') return 60;
+    if (normalized === 'Qualifying') return 60;
+    if (normalized === 'Sprint Qualifying') return 60;
+    if (normalized.startsWith('Free Practice')) return 60;
+    return 60;
+}
+
+function getLiveSessionName(race, now) {
+    const entries = Object.entries(race.sessions);
+    for (const [name, when] of entries) {
+        const start = new Date(when);
+        if (Number.isNaN(start.getTime())) continue;
+        const durationMs = getSessionDurationMinutes(name) * 60 * 1000;
+        const end = new Date(start.getTime() + durationMs);
+        if (now >= start && now <= end) return normalizeSessionLabel(name);
+    }
+    return '';
+}
+
 function getTimezoneValue() {
     return currentTimezone;
 }
@@ -203,7 +234,7 @@ function renderSessions(race, driversBySession) {
     }).join('');
 }
 
-function renderRaceItem(race, index, nextRaceName, now, podium, driversBySession) {
+function renderRaceItem(race, index, nextRaceName, now, podium, driversBySession, isLive, liveSessionName) {
     const weekendDate = formatWeekendDate(race.start);
     const flagUrl = flagUrlForRace(race);
     const flagLabel = race.country_name ? `${race.country_name} flag` : 'Country flag';
@@ -212,7 +243,11 @@ function renderRaceItem(race, index, nextRaceName, now, podium, driversBySession
     const past = isPastRace(race, now);
     const badge = isNext ? '<span class="badge badge-next">Next</span>' : '';
     const sprint = sprintBadge ? '<span class="badge badge-sprint">Sprint</span>' : '';
+    const liveBadge = isLive
+        ? '<a class="badge badge-live" href="https://www.formula1.com/" target="_blank" rel="noopener"><span class="badge-live-dot"></span>Live</a>'
+        : '';
     const done = past && (!podium || !podium.length) ? '<span class="badge badge-done">Finished</span>' : '';
+    const badges = isLive ? `${liveBadge}` : `${sprint}${badge}${done}`;
     const locationLabel = race.country_name || race.track;
     const rowNumber = String(index + 1).padStart(2, '0');
     const podiumHtml = past && podium && podium.length ? renderPodium(podium) : '';
@@ -223,7 +258,7 @@ function renderRaceItem(race, index, nextRaceName, now, podium, driversBySession
     const raceKey = encodeURIComponent(race.name || '');
 
     return `
-        <div class="race-item ${isNext ? 'is-next' : ''} ${past ? 'is-past' : ''}" data-race="${raceKey}">
+        <div class="race-item ${isNext ? 'is-next' : ''} ${past ? 'is-past' : ''} ${isLive ? 'is-live' : ''}" data-race="${raceKey}">
             <div class="race-row">
                 <span class="race-num">${rowNumber}</span>
                 <div class="race-info">
@@ -236,8 +271,18 @@ function renderRaceItem(race, index, nextRaceName, now, podium, driversBySession
                 <div class="race-podium-slot">${podiumHtml || ''}</div>
                 <span class="race-date">${weekendDate}</span>
                 <span class="race-location">${safeLocation}</span>
-                <div class="race-badge">${sprint}${badge}${done}</div>
+                <div class="race-badge">${badges}</div>
             </div>
+            ${isLive ? `
+                <div class="live-row">
+                    <a class="live-row-link" href="https://www.formula1.com/" target="_blank" rel="noopener">
+                        <span class="live-row-dot"></span>
+                        <span class="live-row-label">${escapeHtml(liveSessionName || 'Weekend')} — In Progress</span>
+                        <span class="live-row-cta">Watch on F1 TV</span>
+                        <span class="live-row-arrow">→</span>
+                    </a>
+                </div>
+            ` : ''}
             <div class="sessions">
                 ${renderSessions(race, driversBySession)}
             </div>
@@ -249,7 +294,7 @@ function renderRaceItem(race, index, nextRaceName, now, podium, driversBySession
 // so expanding the same row twice never triggers a second API call.
 const _fetchedRaces = new Set();
 
-function renderRaces(races, nextRaceName, raceResults) {
+function renderRaces(races, nextRaceName, raceResults, liveRaceName, liveSessionName) {
     if (!races.length) {
         raceListEl.innerHTML = '<div class="empty-state">No race weekends available right now.</div>';
         return;
@@ -261,7 +306,9 @@ function renderRaces(races, nextRaceName, raceResults) {
             const result = raceResults ? raceResults[race.name] : null;
             const podium = result ? result.podium : null;
             const driversBySession = result ? result.sessions : null;
-            return renderRaceItem(race, index, nextRaceName, now, podium, driversBySession);
+            const isLive = liveRaceName && race.name === liveRaceName;
+            const sessionLabel = isLive ? liveSessionName : '';
+            return renderRaceItem(race, index, nextRaceName, now, podium, driversBySession, isLive, sessionLabel);
         })
         .join('');
 
@@ -601,25 +648,31 @@ async function fetchAndRender() {
     setStatus('');
     updateTimezoneLabel();
     try {
-        const [races, nextRace] = await Promise.all([
-            fetchJSON(apiUrl('/races')),
-            fetchJSON(apiUrl('/races/next')).catch(() => null)
+        const [races] = await Promise.all([
+            fetchJSON(apiUrl('/races'))
         ]);
         const sortedRaces = [...races].sort((a, b) => new Date(a.start) - new Date(b.start));
         const filteredRaces = filterUnofficialRaces(sortedRaces);
+        const now = new Date();
+        const forceLive = isForceLiveEnabled();
+        const nextRaceName = filteredRaces.find((race) => new Date(race.start) > now)?.name || null;
+        const liveRace = forceLive
+            ? (filteredRaces.find((race) => race.name === nextRaceName) || filteredRaces[0] || null)
+            : (filteredRaces.find((race) => getLiveSessionName(race, now)) || null);
+        const liveRaceName = liveRace ? liveRace.name : null;
+        const liveSessionName = liveRace ? (forceLive ? '' : getLiveSessionName(liveRace, now)) : '';
         totalWeekendsEl.textContent = String(filteredRaces.length);
         totalSprintsEl.textContent = String(getSprintCount(filteredRaces));
         formatSeasonRange(filteredRaces);
-        renderRaces(filteredRaces, nextRace ? nextRace.name : null, null);
+        renderRaces(filteredRaces, nextRaceName, null, liveRaceName, liveSessionName);
 
-        const now = new Date();
         const pastRaces = filteredRaces.filter((race) => isPastRace(race, now));
         const racesToPrefetch = PREFETCH_PAST_RESULTS > 0
             ? pastRaces.slice(-PREFETCH_PAST_RESULTS)
             : [];
         if (racesToPrefetch.length) {
             const raceResults = await fetchAllRaceResults(racesToPrefetch);
-            renderRaces(filteredRaces, nextRace ? nextRace.name : null, raceResults);
+            renderRaces(filteredRaces, nextRaceName, raceResults, liveRaceName, liveSessionName);
         }
     } catch (error) {
         setStatus(`Could not load schedule: ${error.message}`);
