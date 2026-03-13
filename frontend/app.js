@@ -277,7 +277,7 @@ function renderRaceItem(race, index, nextRaceName, now, podium, driversBySession
                 <div class="live-row">
                     <a class="live-row-link" href="https://www.formula1.com/" target="_blank" rel="noopener">
                         <span class="live-row-dot"></span>
-                        <span class="live-row-label">${escapeHtml(liveSessionName || 'Weekend')} — In Progress</span>
+                        <span class="live-row-label">${escapeHtml(liveSessionName || 'Race Weekend')} — In Progress</span>
                         <span class="live-row-cta">Watch on F1 TV</span>
                         <span class="live-row-arrow">→</span>
                     </a>
