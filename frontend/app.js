@@ -240,7 +240,7 @@ function renderRaceItem(race, index, nextRaceName, now, podium, driversBySession
     const flagLabel = race.country_name ? `${race.country_name} flag` : 'Country flag';
     const sprintBadge = Object.keys(race.sessions).some((name) => normalizeSessionLabel(name).includes('Sprint'));
     const past = isPastRace(race, now);
-    const sprint = sprintBadge ? '<span class="badge badge-sprint">Sprint</span>' : '';
+    const sprint = sprintBadge && !past ? '<span class="badge badge-sprint">Sprint</span>' : '';
     const liveBadge = isLive
         ? '<a class="badge badge-live" href="https://www.formula1.com/" target="_blank" rel="noopener"><span class="badge-live-dot"></span>Live</a>'
         : '';
