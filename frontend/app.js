@@ -55,6 +55,14 @@ function normalizeSessionLabel(label) {
     return SESSION_LABELS[label] || label;
 }
 
+function displaySessionLabel(label) {
+    const normalized = normalizeSessionLabel(label);
+    if (normalized === 'Free Practice 1') return 'FP1';
+    if (normalized === 'Free Practice 2') return 'FP2';
+    if (normalized === 'Free Practice 3') return 'FP3';
+    return normalized;
+}
+
 function sessionOrder(name) {
     return SESSION_PRIORITY[name] || 99;
 }
@@ -69,6 +77,15 @@ function formatDateParts(value) {
 
 function formatWeekendDate(value) {
     return getFormatter({ month: 'short', day: '2-digit' }).format(new Date(value));
+}
+
+function formatLapTime(seconds) {
+    if (seconds == null || !Number.isFinite(seconds)) return '';
+    const totalMs = Math.round(seconds * 1000);
+    const minutes = Math.floor(totalMs / 60000);
+    const secs = Math.floor((totalMs % 60000) / 1000);
+    const ms = totalMs % 1000;
+    return `${minutes}:${String(secs).padStart(2, '0')}.${String(ms).padStart(3, '0')}`;
 }
 
 function isForceLiveEnabled() {
@@ -222,7 +239,7 @@ function isPastRace(race, now) {
     return lastSession < now;
 }
 
-function renderSessions(race, driversBySession) {
+function renderSessions(race, driversBySession, now) {
     const rows = Object.entries(race.sessions)
         .map(([name, when]) => ({ name: normalizeSessionLabel(name), when }))
         .sort((a, b) => {
@@ -235,14 +252,23 @@ function renderSessions(race, driversBySession) {
 
     return rows.map((session) => {
         const parts = formatDateParts(session.when);
-        const driver = driversBySession ? driversBySession[session.name] : null;
+        const sessionStat = driversBySession ? driversBySession[session.name] : null;
+        const driver = sessionStat && sessionStat.driver ? sessionStat.driver : sessionStat;
         const chipHtml = driver ? renderDriverChip(driver) : '';
+        const end = new Date(new Date(session.when).getTime() + getSessionDurationMinutes(session.name) * 60 * 1000);
+        const isComplete = now && end < now;
+        const hasLap = sessionStat && sessionStat.lapTime && isComplete;
+        const lapContent = hasLap
+            ? formatLapTime(sessionStat.lapTime)
+            : '?:?.---';
+        const lapHtml = `<span class="session-lap-pill">${lapContent}</span>`;
+        const fastestLabel = (sessionStat && sessionStat.lapTime) ? renderFastestLapLabel() : '';
         return `
             <div class="session-row">
                 <span></span>
                 <span class="session-name">
-                    <span>${session.name}</span>
-                    <span class="session-driver">${chipHtml}</span>
+                    <span class="session-title">${displaySessionLabel(session.name)}</span>
+                    <span class="session-driver ${hasLap ? 'is-fastest' : ''}">${fastestLabel}${chipHtml}${lapHtml}</span>
                 </span>
                 <span class="session-date">${parts.day}</span>
                 <span class="session-time">${parts.time}</span>
@@ -299,7 +325,7 @@ function renderRaceItem(race, index, nextRaceName, now, podium, driversBySession
                 </div>
             ` : ''}
             <div class="sessions">
-                ${renderSessions(race, driversBySession)}
+                ${renderSessions(race, driversBySession, now)}
             </div>
         </div>
     `;
@@ -378,7 +404,7 @@ function renderRaces(races, nextRaceName, raceResults, liveRaceName, liveSession
                         : '';
                 }
 
-                sessions.innerHTML = renderSessions(race, result.sessions);
+                sessions.innerHTML = renderSessions(race, result.sessions, now);
             } catch (e) {
                 _fetchedRaces.delete(raceName);   // allow retry on next expand
                 console.warn('Could not load race results for', raceName, e);
@@ -500,10 +526,14 @@ async function fetchOpenF1(path) {
     return _queueOpenF1Request(path);
 }
 
+const _driverMapCache = new Map();
+
 async function fetchDriverMap(sessionKey) {
+    if (_driverMapCache.has(sessionKey)) return _driverMapCache.get(sessionKey);
     const data = await fetchOpenF1(`/drivers?session_key=${sessionKey}`);
-    if (!data) return {};
-    return Object.fromEntries(data.map((driver) => [driver.driver_number, driver]));
+    const map = data ? Object.fromEntries(data.map((driver) => [driver.driver_number, driver])) : {};
+    _driverMapCache.set(sessionKey, map);
+    return map;
 }
 
 async function fetchPodium(raceSessionKey) {
@@ -526,9 +556,31 @@ async function fetchFastestDriver(sessionKey) {
     return driverMap[results[0].driver_number] || null;
 }
 
+async function fetchFastestLapStat(sessionKey) {
+    const laps = await fetchOpenF1(`/laps?session_key=${sessionKey}`);
+    if (!laps || !laps.length) return null;
+    const validLaps = laps.filter((lap) => lap.lap_duration != null && lap.lap_duration > 0);
+    if (!validLaps.length) return null;
+    validLaps.sort((a, b) => a.lap_duration - b.lap_duration);
+    const fastest = validLaps[0];
+    const driverMap = await fetchDriverMap(sessionKey);
+    const driver = driverMap[fastest.driver_number];
+    if (!driver) return null;
+    return { driver, lapTime: fastest.lap_duration };
+}
+
 const DRIVER_STAT_SESSIONS = new Set([
     'Free Practice 1', 'Free Practice 2', 'Free Practice 3',
     'Sprint Qualifying', 'Qualifying', 'Race'
+]);
+
+const FASTEST_LAP_SESSIONS = new Set([
+    'Free Practice 1',
+    'Free Practice 2',
+    'Free Practice 3',
+    'Qualifying',
+    'Sprint Qualifying',
+    'Race'
 ]);
 
 const SESSION_NAME_TO_OPENF1 = {
@@ -561,11 +613,17 @@ async function fetchRaceResults(race, meetingKey) {
     await Promise.all(sessionMetas.map(async ({ sessionName, sessionKey }) => {
         if (sessionName === 'Race') {
             const podium = await fetchPodium(sessionKey);
-            if (podium.length) sessionResults[sessionName] = podium[0];
             sessionResults.__podium = podium;
+            const stat = await fetchFastestLapStat(sessionKey);
+            if (stat) sessionResults[sessionName] = stat;
         } else {
-            const driver = await fetchFastestDriver(sessionKey);
-            if (driver) sessionResults[sessionName] = driver;
+            if (FASTEST_LAP_SESSIONS.has(sessionName)) {
+                const stat = await fetchFastestLapStat(sessionKey);
+                if (stat) sessionResults[sessionName] = stat;
+            } else {
+                const driver = await fetchFastestDriver(sessionKey);
+                if (driver) sessionResults[sessionName] = driver;
+            }
         }
     }));
 
@@ -613,6 +671,10 @@ function renderDriverChip(driver) {
             <span class="driver-chip-acronym" style="color:${color}">${driver.name_acronym}</span>
         </span>
     `;
+}
+
+function renderFastestLapLabel() {
+    return `<span class="fastest-lap-label">Fastest Lap</span>`;
 }
 
 function renderPodium(podium) {

@@ -479,6 +479,43 @@ h1 em {
     font-weight: 400;
     padding-left: 2px;
     grid-column: 2;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: center;
+    gap: 12px;
+    min-width: 0;
+}
+
+.session-title {
+    flex: 1;
+    min-width: 0;
+}
+
+.session-driver {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    flex-shrink: 0;
+    justify-self: end;
+    margin-right: 500px;
+}
+
+.fastest-lap-label {
+    font-family: "DM Mono", monospace;
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: #b24cff;
+}
+
+.session-lap-pill {
+    font-family: "DM Mono", monospace;
+    font-size: 11px;
+    color: var(--white);
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid var(--border);
+    padding: 2px 8px;
+    border-radius: 999px;
 }
 
 .session-date {
