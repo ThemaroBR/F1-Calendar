@@ -10,7 +10,7 @@ from fastapi.responses import Response
 
 from .models import Race
 from .services import is_valid_timezone, next_race, race_to_timezone
-from .storage import load_races
+from .storage import OpenF1UnavailableError, load_races
 from .settings import (
     API_TITLE,
     CORS_ALLOW_CREDENTIALS,
@@ -103,6 +103,13 @@ def _apply_timezone_to_race(race: Race, tz: str | None) -> Race:
     return race_to_timezone(race, tz)
 
 
+def _load_races_or_502() -> list[Race]:
+    try:
+        return load_races()
+    except OpenF1UnavailableError:
+        raise HTTPException(status_code=502, detail="OpenF1 unavailable")
+
+
 @app.get("/")
 def home():
     return {"message": "F1 calendar API running"}
@@ -111,7 +118,7 @@ def home():
 @app.get("/races", response_model=list[Race])
 def list_races(tz: Annotated[str | None, Query()] = None):
     tz = _parse_timezone(tz)
-    races = load_races()
+    races = _load_races_or_502()
     if tz is None:
         return races
     return [race_to_timezone(race, tz) for race in races]
@@ -121,7 +128,7 @@ def list_races(tz: Annotated[str | None, Query()] = None):
 def get_next_race(tz: Annotated[str | None, Query()] = None):
     tz = _parse_timezone(tz)
 
-    race = next_race(load_races())
+    race = next_race(_load_races_or_502())
     if race is None:
         raise HTTPException(status_code=404, detail="No upcoming races found")
 
@@ -131,7 +138,7 @@ def get_next_race(tz: Annotated[str | None, Query()] = None):
 @app.get("/races/{race_name}", response_model=Race)
 def get_race(race_name: str, tz: Annotated[str | None, Query()] = None):
     tz = _parse_timezone(tz)
-    race = next((r for r in load_races() if r.name == race_name), None)
+    race = next((r for r in _load_races_or_502() if r.name == race_name), None)
     if race is None:
         raise HTTPException(status_code=404, detail="Race not found")
     return _apply_timezone_to_race(race, tz)

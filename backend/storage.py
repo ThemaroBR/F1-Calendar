@@ -1,7 +1,6 @@
 import json
 import logging
 import time
-from pathlib import Path
 from typing import TypedDict
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
@@ -10,8 +9,6 @@ from urllib.request import urlopen
 from .models import Race
 from .settings import CACHE_TTL_SECONDS, OPENF1_SESSIONS_URL, TARGET_YEAR
 
-
-DATA_FILE = Path(__file__).parent.parent / "data" / "races.json"
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +33,11 @@ class MeetingAccumulator(TypedDict):
     country_name: str | None
     country_code: str | None
     sessions: dict[str, str]
+
+
+class OpenF1UnavailableError(Exception):
+    """Raised when OpenF1 data cannot be fetched or parsed."""
+
 
 
 def _normalize_session_name(name: str) -> str:
@@ -159,12 +161,6 @@ def _build_races_from_sessions(rows: list[OpenF1SessionRow]) -> list[Race]:
     return sorted(races, key=lambda race: race.start)
 
 
-def _load_local_races() -> list[Race]:
-    with DATA_FILE.open() as file:
-        data = json.load(file)
-    return [race for race in (Race(**row) for row in data) if race.start.year == TARGET_YEAR]
-
-
 def _set_cache(races: list[Race], now: float) -> list[Race]:
     global _cache, _cache_until
     _cache = races
@@ -173,7 +169,7 @@ def _set_cache(races: list[Race], now: float) -> list[Race]:
 
 
 def load_races() -> list[Race]:
-    """Load 2026 races from OpenF1; fallback to races.json when unavailable."""
+    """Load races from OpenF1; raise when unavailable."""
     now = time.time()
     if _cache is not None and now < _cache_until:
         return _cache
@@ -181,9 +177,9 @@ def load_races() -> list[Race]:
     try:
         rows = _fetch_openf1_sessions(TARGET_YEAR)
         races = _build_races_from_sessions(rows)
-        if races:
-            return _set_cache(races, now)
+        if not races:
+            raise OpenF1UnavailableError("OpenF1 returned no races")
+        return _set_cache(races, now)
     except (HTTPError, URLError, TimeoutError, json.JSONDecodeError, ValueError) as exc:
-        logger.warning("OpenF1 fetch failed; falling back to local data", exc_info=exc)
-
-    return _set_cache(_load_local_races(), now)
+        logger.warning("OpenF1 fetch failed", exc_info=exc)
+        raise OpenF1UnavailableError("OpenF1 fetch failed") from exc
