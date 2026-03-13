@@ -240,6 +240,11 @@ function isPastRace(race, now) {
 }
 
 function renderSessions(race, driversBySession, now) {
+    const sessionTimes = Object.values(race.sessions)
+        .map((t) => new Date(t))
+        .filter((d) => !Number.isNaN(d.getTime()));
+    const weekendStart = sessionTimes.length ? new Date(Math.min(...sessionTimes)) : null;
+    const weekendStarted = weekendStart ? (now && now >= weekendStart) : false;
     const rows = Object.entries(race.sessions)
         .map(([name, when]) => ({ name: normalizeSessionLabel(name), when }))
         .sort((a, b) => {
@@ -260,9 +265,9 @@ function renderSessions(race, driversBySession, now) {
         const hasLap = sessionStat && sessionStat.lapTime && isComplete;
         const lapContent = hasLap
             ? formatLapTime(sessionStat.lapTime)
-            : '?:?.---';
-        const lapHtml = `<span class="session-lap-pill">${lapContent}</span>`;
-        const fastestLabel = (sessionStat && sessionStat.lapTime) ? renderFastestLapLabel() : '';
+            : '--:--.---';
+        const lapHtml = weekendStarted ? `<span class="session-lap-pill">${lapContent}</span>` : '';
+        const fastestLabel = weekendStarted && (sessionStat && sessionStat.lapTime) ? renderFastestLapLabel() : '';
         return `
             <div class="session-row">
                 <span></span>
