@@ -457,11 +457,19 @@ h1 em {
 .sessions {
     overflow: hidden;
     max-height: 0;
-    transition: max-height 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    opacity: 0;
+    transform: translateY(-6px);
+    transition: max-height 0.45s cubic-bezier(0.4, 0, 0.2, 1) 0.12s,
+        opacity 0.25s ease 0s,
+        transform 0.35s ease 0s;
+    will-change: max-height, opacity, transform;
 }
 
 .sessions.open {
     max-height: 1000px;
+    opacity: 1;
+    transform: translateY(0);
+    transition-delay: 0s, 0s, 0s;
 }
 
 .session-row {

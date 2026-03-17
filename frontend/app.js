@@ -366,7 +366,31 @@ function renderRaces(races, nextRaceName, raceResults, liveRaceName, liveSession
         item.addEventListener('click', async () => {
             if (!sessions) return;
 
-            const isOpening = !sessions.classList.contains('open');
+            const isOpen = sessions.classList.contains('open');
+
+            if (isOpen) {
+                const existingTimer = sessions.dataset.closingTimer;
+                if (existingTimer) {
+                    clearTimeout(Number(existingTimer));
+                    delete sessions.dataset.closingTimer;
+                }
+                sessions.classList.add('closing');
+                sessions.classList.remove('open');
+                item.classList.remove('open');
+                const timer = window.setTimeout(() => {
+                    sessions.classList.remove('closing');
+                    sessions.innerHTML = '';
+                    const podiumSlot = item.querySelector('.race-podium-slot');
+                    if (podiumSlot) {
+                        podiumSlot.innerHTML = '';
+                    }
+                    delete sessions.dataset.closingTimer;
+                }, 220);
+                sessions.dataset.closingTimer = String(timer);
+                return;
+            }
+
+            const isOpening = true;
             if (isOpening) {
                 raceListEl.querySelectorAll('.race-item.open').forEach((openItem) => {
                     if (openItem === item) return;
@@ -382,17 +406,14 @@ function renderRaces(races, nextRaceName, raceResults, liveRaceName, liveSession
                     }
                 });
             }
-            sessions.classList.toggle('open');
-            item.classList.toggle('open');
-
-            if (!isOpening) {
-                sessions.innerHTML = '';
-                const podiumSlot = item.querySelector('.race-podium-slot');
-                if (podiumSlot) {
-                    podiumSlot.innerHTML = '';
-                }
-                return;
+            const existingTimer = sessions.dataset.closingTimer;
+            if (existingTimer) {
+                clearTimeout(Number(existingTimer));
+                delete sessions.dataset.closingTimer;
             }
+            sessions.classList.remove('closing');
+            sessions.classList.add('open');
+            item.classList.add('open');
 
             const raceName = item.dataset.race ? decodeURIComponent(item.dataset.race) : '';
             if (!raceName) return;
