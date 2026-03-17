@@ -596,6 +596,15 @@ h1 em {
     }
 }
 
+@keyframes shimmer {
+    0% {
+        transform: translateX(-100%);
+    }
+    100% {
+        transform: translateX(100%);
+    }
+}
+
 ::-webkit-scrollbar {
     width: 4px;
 }
@@ -839,6 +848,35 @@ h1 em {
 
 .session-loading {
     opacity: 0.5;
+    position: relative;
+    overflow: hidden;
+}
+
+.session-loading::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.08), transparent);
+    transform: translateX(-100%);
+    animation: shimmer 1.4s ease-in-out infinite;
+}
+
+.podium-skeleton {
+    height: 72px;
+    width: 280px;
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.05);
+    position: relative;
+    overflow: hidden;
+}
+
+.podium-skeleton::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.08), transparent);
+    transform: translateX(-100%);
+    animation: shimmer 1.4s ease-in-out infinite;
 }
 
 @media (max-width: 980px) {

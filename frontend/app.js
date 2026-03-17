@@ -263,10 +263,8 @@ function renderSessions(race, driversBySession, now) {
         const end = new Date(new Date(session.when).getTime() + getSessionDurationMinutes(session.name) * 60 * 1000);
         const isComplete = now && end < now;
         const hasLap = sessionStat && sessionStat.lapTime && isComplete;
-        const lapContent = hasLap
-            ? formatLapTime(sessionStat.lapTime)
-            : '--:--.---';
-        const lapHtml = weekendStarted ? `<span class="session-lap-pill">${lapContent}</span>` : '';
+        const lapContent = hasLap ? formatLapTime(sessionStat.lapTime) : '';
+        const lapHtml = lapContent ? `<span class="session-lap-pill">${lapContent}</span>` : '';
         const fastestLabel = weekendStarted && (sessionStat && sessionStat.lapTime) ? renderFastestLapLabel() : '';
         return `
             <div class="session-row">
@@ -340,6 +338,18 @@ function renderRaceItem(race, index, nextRaceName, now, podium, driversBySession
 // so expanding the same row twice never triggers a second API call.
 const _fetchedRaces = new Set();
 const _raceResults = new Map();
+const _raceFetches = new Map();
+
+function ensureLoadingRow(container) {
+    if (!container) return null;
+    const existing = container.querySelector('.session-loading');
+    if (existing) return existing;
+    const loadingRow = document.createElement('div');
+    loadingRow.className = 'session-row session-loading';
+    loadingRow.innerHTML = '<span></span><span class="session-name" style="color:var(--muted)">Loading results\u2026</span>';
+    container.prepend(loadingRow);
+    return loadingRow;
+}
 
 function renderRaces(races, nextRaceName, raceResults, liveRaceName, liveSessionName) {
     if (!races.length) {
@@ -437,7 +447,27 @@ function renderRaces(races, nextRaceName, raceResults, liveRaceName, liveSession
                 return;
             }
 
-            if (_fetchedRaces.has(raceName)) return;
+            const inFlight = _raceFetches.get(raceName);
+            if (inFlight) {
+                sessions.innerHTML = renderSessions(race, null, now);
+                const loadingRow = ensureLoadingRow(sessions);
+                const podiumSlot = item.querySelector('.race-podium-slot');
+                if (podiumSlot) {
+                    podiumSlot.innerHTML = '<div class="race-podium podium-skeleton"></div>';
+                }
+                inFlight.then((result) => {
+                    if (loadingRow) loadingRow.remove();
+                    if (!result || !item.classList.contains('open')) return;
+                    const podiumSlot = item.querySelector('.race-podium-slot');
+                    if (podiumSlot) {
+                        podiumSlot.innerHTML = result.podium && result.podium.length
+                            ? renderPodium(result.podium)
+                            : '';
+                    }
+                    sessions.innerHTML = renderSessions(race, result.sessions, now);
+                });
+                return;
+            }
 
             // Mark as fetched optimistically; rolled back on error so the user can retry.
             _fetchedRaces.add(raceName);
@@ -446,16 +476,25 @@ function renderRaces(races, nextRaceName, raceResults, liveRaceName, liveSession
                 podiumSlot.innerHTML = '<div class="race-podium podium-skeleton"></div>';
             }
 
-            const loadingRow = document.createElement('div');
-            loadingRow.className = 'session-row session-loading';
-            loadingRow.innerHTML = '<span></span><span class="session-name" style="color:var(--muted)">Loading results\u2026</span>';
-            sessions.prepend(loadingRow);
+            sessions.innerHTML = renderSessions(race, null, now);
+            const loadingRow = ensureLoadingRow(sessions);
 
-            try {
+            const fetchPromise = (async () => {
                 const meetingKey = await fetchMeetingKey(race);
-                if (!meetingKey) return;
+                if (!meetingKey) return null;
                 const result = await fetchRaceResults(race, meetingKey);
                 _raceResults.set(raceName, result);
+                return result;
+            })();
+
+            _raceFetches.set(raceName, fetchPromise);
+
+            try {
+                const result = await fetchPromise;
+                _raceFetches.delete(raceName);
+                if (!result) return;
+
+                if (!item.classList.contains('open')) return;
 
                 if (podiumSlot) {
                     podiumSlot.innerHTML = result.podium && result.podium.length
@@ -466,9 +505,10 @@ function renderRaces(races, nextRaceName, raceResults, liveRaceName, liveSession
                 sessions.innerHTML = renderSessions(race, result.sessions, now);
             } catch (e) {
                 _fetchedRaces.delete(raceName);   // allow retry on next expand
+                _raceFetches.delete(raceName);
                 console.warn('Could not load race results for', raceName, e);
             } finally {
-                loadingRow.remove();
+                if (loadingRow) loadingRow.remove();
             }
         });
     });
