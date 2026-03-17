@@ -282,7 +282,7 @@ function renderSessions(race, driversBySession, now) {
     }).join('');
 }
 
-function renderRaceItem(race, index, nextRaceName, now, podium, driversBySession, isLive, liveSessionName) {
+function renderRaceItem(race, index, nextRaceName, now, podium, driversBySession, isLive, liveSessionName, showPodium) {
     const weekendDate = formatWeekendDate(race.start);
     const flagUrl = flagUrlForRace(race);
     const flagLabel = race.country_name ? `${race.country_name} flag` : 'Country flag';
@@ -296,7 +296,7 @@ function renderRaceItem(race, index, nextRaceName, now, podium, driversBySession
     const badges = isLive ? `${liveBadge}` : `${sprint}${done}`;
     const locationLabel = race.country_name || race.track;
     const rowNumber = String(index + 1).padStart(2, '0');
-    const podiumHtml = past && podium && podium.length ? renderPodium(podium) : '';
+    const podiumHtml = showPodium && past && podium && podium.length ? renderPodium(podium) : '';
     const safeRaceName = escapeHtml(race.name);
     const safeTrack = escapeHtml(race.track);
     const safeLocation = escapeHtml(locationLabel);
@@ -339,6 +339,7 @@ function renderRaceItem(race, index, nextRaceName, now, podium, driversBySession
 // Tracks which race names have already had their results fetched,
 // so expanding the same row twice never triggers a second API call.
 const _fetchedRaces = new Set();
+const _raceResults = new Map();
 
 function renderRaces(races, nextRaceName, raceResults, liveRaceName, liveSessionName) {
     if (!races.length) {
@@ -354,7 +355,7 @@ function renderRaces(races, nextRaceName, raceResults, liveRaceName, liveSession
             const driversBySession = result ? result.sessions : null;
             const isLive = liveRaceName && race.name === liveRaceName;
             const sessionLabel = isLive ? liveSessionName : '';
-            return renderRaceItem(race, index, nextRaceName, now, podium, driversBySession, isLive, sessionLabel);
+            return renderRaceItem(race, index, nextRaceName, now, podium, driversBySession, isLive, sessionLabel, false);
         })
         .join('');
 
@@ -373,18 +374,49 @@ function renderRaces(races, nextRaceName, raceResults, liveRaceName, liveSession
                     const openSessions = openItem.querySelector('.sessions');
                     if (openSessions) {
                         openSessions.classList.remove('open');
+                        openSessions.innerHTML = '';
+                    }
+                    const openPodium = openItem.querySelector('.race-podium-slot');
+                    if (openPodium) {
+                        openPodium.innerHTML = '';
                     }
                 });
             }
             sessions.classList.toggle('open');
             item.classList.toggle('open');
 
-            if (!isOpening) return;
+            if (!isOpening) {
+                sessions.innerHTML = '';
+                const podiumSlot = item.querySelector('.race-podium-slot');
+                if (podiumSlot) {
+                    podiumSlot.innerHTML = '';
+                }
+                return;
+            }
 
             const raceName = item.dataset.race ? decodeURIComponent(item.dataset.race) : '';
-            if (!raceName || _fetchedRaces.has(raceName)) return;
+            if (!raceName) return;
             const race = races.find((r) => r.name === raceName);
-            if (!race || !isPastRace(race, now)) return;
+            if (!race) return;
+
+            if (!isPastRace(race, now)) {
+                sessions.innerHTML = renderSessions(race, null, now);
+                return;
+            }
+
+            const cached = _raceResults.get(raceName);
+            if (cached) {
+                const podiumSlot = item.querySelector('.race-podium-slot');
+                if (podiumSlot) {
+                    podiumSlot.innerHTML = cached.podium && cached.podium.length
+                        ? renderPodium(cached.podium)
+                        : '';
+                }
+                sessions.innerHTML = renderSessions(race, cached.sessions, now);
+                return;
+            }
+
+            if (_fetchedRaces.has(raceName)) return;
 
             // Mark as fetched optimistically; rolled back on error so the user can retry.
             _fetchedRaces.add(raceName);
@@ -402,6 +434,7 @@ function renderRaces(races, nextRaceName, raceResults, liveRaceName, liveSession
                 const meetingKey = await fetchMeetingKey(race);
                 if (!meetingKey) return;
                 const result = await fetchRaceResults(race, meetingKey);
+                _raceResults.set(raceName, result);
 
                 if (podiumSlot) {
                     podiumSlot.innerHTML = result.podium && result.podium.length
