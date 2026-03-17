@@ -1,4 +1,8 @@
-const apiBase = window.API_BASE || 'http://127.0.0.1:8000';
+const apiBase = window.API_BASE || (
+    (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+        ? 'http://127.0.0.1:8000'
+        : 'https://f1-calendar.onrender.com'
+);
 const SESSION_LABELS = {
     FP1: 'Free Practice 1',
     FP2: 'Free Practice 2',
@@ -514,21 +518,34 @@ function renderRaces(races, nextRaceName, raceResults, liveRaceName, liveSession
     });
 }
 
-async function fetchJSON(url) {
-    const response = await fetch(url);
-    if (!response.ok) {
-        let detail = `${response.status}`;
+async function fetchJSON(url, retries = 2) {
+    let lastError = null;
+    for (let attempt = 0; attempt <= retries; attempt++) {
         try {
-            const payload = await response.json();
-            if (payload.detail) {
-                detail = payload.detail;
+            const response = await fetch(url);
+            if (!response.ok) {
+                let detail = `${response.status}`;
+                try {
+                    const payload = await response.json();
+                    if (payload.detail) {
+                        detail = payload.detail;
+                    }
+                } catch (e) {
+                    console.warn('Could not parse error response body', e);
+                }
+                throw new Error(detail);
             }
-        } catch (e) {
-            console.warn('Could not parse error response body', e);
+            return response.json();
+        } catch (error) {
+            lastError = error;
+            const shouldRetry = attempt < retries && (
+                error instanceof TypeError || String(error.message || '').includes('Failed to fetch')
+            );
+            if (!shouldRetry) break;
+            await new Promise((resolve) => setTimeout(resolve, 700 * (attempt + 1)));
         }
-        throw new Error(detail);
     }
-    return response.json();
+    throw lastError;
 }
 
 const openF1Base = `${apiBase}/openf1`;

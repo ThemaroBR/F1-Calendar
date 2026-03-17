@@ -68,6 +68,15 @@
         <div id="race-list"></div>
     </section>
 
+    <script>
+        (function configureApiBase() {
+            const host = window.location.hostname;
+            const isLocal = host === 'localhost' || host === '127.0.0.1';
+            window.API_BASE = isLocal
+                ? 'http://127.0.0.1:8000'
+                : 'https://f1-calendar.onrender.com';
+        })();
+    </script>
     <script src="./app.js"></script>
 </body>
 </html>
